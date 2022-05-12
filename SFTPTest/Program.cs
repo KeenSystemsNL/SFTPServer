@@ -8,10 +8,9 @@ namespace SFTPTest;
 
 public class Program
 {
-    private static readonly CancellationTokenSource _cancellationtokensource = new();
     private static ILogger<Program>? _logger;
 
-    public static async Task<int> Main(string[] args)
+    public static void Main(string[] args)
     {
         var configurationbuilder = new ConfigurationBuilder()
             .SetBasePath(Path.GetDirectoryName(Assembly.GetEntryAssembly()!.Location))
@@ -28,18 +27,17 @@ public class Program
 
         AppDomain.CurrentDomain.UnhandledException += (sender, e) =>
         {
-            _logger.LogCritical(e.ExceptionObject as Exception, "Crash");
+            _logger.LogCritical(e.ExceptionObject as Exception, "Unhandled exception");
             Environment.Exit(1);
         };
 
         var server = serviceprovider.GetRequiredService<IServer>();
-
         using var stdin = Console.OpenStandardInput();
         using var stdout = Console.OpenStandardOutput();
 
         _logger.LogInformation("Starting server...");
-        await server.RunAsync(stdin, stdout, _cancellationtokensource.Token).ConfigureAwait(false);
+
+        server.Run(stdin, stdout);
         _logger.LogInformation("Server stopped...");
-        return 0;
     }
 }

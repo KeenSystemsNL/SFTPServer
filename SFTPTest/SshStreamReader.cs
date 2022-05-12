@@ -46,12 +46,4 @@ public class SshStreamReader
 
         return data;
     }
-
-    private bool TryReadBinary(int length, out byte[] buffer)
-    {
-        buffer = new byte[length];
-        var bytesread = _stream.Read(buffer, 0, length);
-
-        return bytesread == length;
-    }
 }
