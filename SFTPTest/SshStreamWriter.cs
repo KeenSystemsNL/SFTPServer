@@ -16,13 +16,29 @@ public class SshStreamWriter
     }
 
     public void Write(MessageType messageType)
-    => _memorystream.WriteByte((byte)messageType);
+        => Write((byte)messageType);
+
+    public void Write(FileAttributeFlags flags)
+        => Write((uint)flags);
+
+    public void Write(FileType fileType)
+        => Write((byte)fileType);
+
+    public void Write(Status status)
+        => Write((uint)status);
 
     public void Write(bool value)
         => _memorystream.WriteByte(value ? (byte)1 : (byte)0);
 
     public void Write(byte value)
         => _memorystream.WriteByte(value);
+
+
+    public void Write(int value)
+        => Write((uint)value);
+
+    public void Write(long value)
+        => Write((ulong)value);
 
     public void Write(uint value)
     {
@@ -85,6 +101,7 @@ public class SshStreamWriter
         var data = _memorystream.ToArray();
 
         logger.LogInformation("Writing: {data}", Dumper.Dump(data));
+        logger.LogInformation("Writing: {data}", Dumper.DumpASCII(data));
 
         var len = new[] { (byte)(data.Length >> 24), (byte)(data.Length >> 16), (byte)(data.Length >> 8), (byte)(data.Length & 0xFF) };
 

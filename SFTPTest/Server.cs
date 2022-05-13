@@ -2,7 +2,6 @@
 using Microsoft.Extensions.Options;
 using SFTPTest.Infrastructure;
 using System.Buffers.Binary;
-using System.Globalization;
 using System.Text;
 
 namespace SFTPTest;
@@ -34,7 +33,7 @@ public class Server : IServer
     {
         var reader = new SshStreamReader(@in);
         var writer = new SshStreamWriter(@out, _options.MaxMessageSize);
-        var session = new Session(reader, writer, new FileHandleCollection());
+        var session = new Session(reader, writer, new FileHandleCollection(), _logger);
         uint msglength;
         var initdone = false;
         do
@@ -75,34 +74,24 @@ public class Server : IServer
     {
         // Get client version
         var clientversion = session.Reader.ReadUInt32();
-        // Send version response (v3)
+        // Send version response (v4)
         session.Writer.Write(MessageType.VERSION);
-        session.Writer.Write((uint)3);
+        session.Writer.Write(4);
     }
 
     private static void RealPathHandler(Session session, uint requestid)
     {
         var path = session.Reader.ReadString();
-        //var controlbyte = reader.ReadByte();
-        //_logger.LogInformation("Control byte: {path}", path);
-        //var composepath = reader.ReadString(Encoding.UTF8);
-        //_logger.LogInformation("Compose path: {composepath}", composepath);
+        if (path == ".")
+        {
+            path = "/";
+        }
 
+        session.Logger.LogInformation("Path: {path}", path);
         session.Writer.Write(MessageType.NAME);
         session.Writer.Write(requestid);
-        session.Writer.Write((uint)1);
-        // Dummy file for SSH_FXP_REALPATH request
-        session.Writer.Write(path);
-        session.Writer.Write($@"----------   0 nobody   nobody          0 {DateTime.Now.ToString("MMM dd HH:mm", CultureInfo.InvariantCulture)} " + path);
-        session.Writer.Write(requestid);
-        session.Writer.Write(uint.MaxValue); // flags
-        session.Writer.Write((ulong)0); // size
-        session.Writer.Write(uint.MaxValue); // uid
-        session.Writer.Write(uint.MaxValue); // gid
-        session.Writer.Write(uint.MaxValue); // permissions
-        session.Writer.Write(GetUnixFileTime(DateTime.Now)); //atime   
-        session.Writer.Write(GetUnixFileTime(DateTime.Now)); //mtime
-        session.Writer.Write((uint)0); // extended_count
+        session.Writer.Write(1);
+        SendFSInfoWithAttributes(session.Writer, new VirtualPath(path));
     }
 
     private static void StatHandler(Session session, uint requestid)
@@ -111,11 +100,14 @@ public class Server : IServer
     private static void LStatHandler(Session session, uint requestid)
     {
         var path = session.Reader.ReadString();
+        var flags = session.Reader.ReadUInt32();
+
+        session.Logger.LogInformation("Path: {path}", path);
 
         session.Writer.Write(MessageType.ATTRS);
         session.Writer.Write(requestid);
 
-        SendAttributes(session.Writer, new Attributes(0));
+        SendAttributes(session.Writer, Attributes.Dummy);
     }
 
     private static void OpenDirHandler(Session session, uint requestid)
@@ -124,6 +116,9 @@ public class Server : IServer
 
         var handle = GetHandle();
         session.FileHandles.Add(handle, path);
+
+        session.Logger.LogInformation("Path: {path}, Handle: {handle}", path, handle);
+
 
         session.Writer.Write(MessageType.HANDLE);
         session.Writer.Write(requestid);
@@ -136,16 +131,17 @@ public class Server : IServer
 
         if (session.FileHandles.TryGetValue(handle, out var path))
         {
-            var allfiles = new DirectoryInfo(@"D:\\test").GetFiles();
+            session.Logger.LogInformation("Path: {path}, Handle: {handle}", path, handle);
 
-            // returns SSH_FXP_NAME or SSH_FXP_STATUS with SSH_FX_EOF 
+            var allfiles = new DirectoryInfo(@"D:\test").GetFileSystemInfos().OrderBy(f => f.Name).ToArray();
+
             session.Writer.Write(MessageType.NAME);
             session.Writer.Write(requestid);
-            session.Writer.Write((uint)allfiles.Length); // all files at the same time
+            session.Writer.Write(allfiles.Length); // all files at the same time
 
             foreach (var file in allfiles)
             {
-                SendFileInfoWithAttributes(session.Writer, file);
+                SendFSInfoWithAttributes(session.Writer, file);
             }
             session.Writer.Write(true); // End of list
 
@@ -160,63 +156,66 @@ public class Server : IServer
     private static void CloseHandler(Session session, uint requestId)
     {
         var handle = session.Reader.ReadString();
+
+        session.Logger.LogInformation("Handle: {handle}", handle);
+
         session.FileHandles.Remove(handle);
 
         SendStatus(session.Writer, requestId, Status.OK);
     }
 
     private static void SendStatus(SshStreamWriter writer, uint requestId, Status status)
-        => SendStatus(writer, requestId, status, GetStatusString(status));
+        => SendStatus(writer, requestId, status, GetStatusString(status), string.Empty);
 
     private static void SendStatus(SshStreamWriter writer, uint requestId, Status status, string errorMessage, string languageTag)
     {
         writer.Write(MessageType.STATUS);
         writer.Write(requestId);
-        writer.Write((uint)status); // status code
+        writer.Write(status);
         writer.Write(errorMessage);
         writer.Write(languageTag);
     }
 
-    private static string GetStatusString(Status status) => status switch
-    {
-        Status.OK => "Succes",
-        Status.EOF => "End of file",
-        Status.NO_SUCH_FILE => "No such file",
-        Status.PERMISSION_DENIED => "Permission denied",
-        Status.FAILURE => "Failure",
-        Status.BAD_MESSAGE => "Bad message",
-        Status.NO_CONNECTION => "No connection",
-        Status.CONNECTION_LOST => "Connection lost",
-        Status.OP_UNSUPPORTED => "Operation unsupported",
-        _ => "Unknown error"
-    };
+    private static string GetStatusString(Status status)
+        => status switch
+        {
+            Status.OK => "Succes",
+            Status.EOF => "End of file",
+            Status.NO_SUCH_FILE => "No such file",
+            Status.PERMISSION_DENIED => "Permission denied",
+            Status.FAILURE => "Failure",
+            Status.BAD_MESSAGE => "Bad message",
+            Status.NO_CONNECTION => "No connection",
+            Status.CONNECTION_LOST => "Connection lost",
+            Status.OP_UNSUPPORTED => "Operation unsupported",
+            _ => "Unknown error"
+        };
 
     private static string GetHandle() => Guid.NewGuid().ToString("N");
 
-    private static uint GetUnixFileTime(DateTimeOffset time)
-    {
-        var diff = time - DateTimeOffset.UnixEpoch;
-        return (uint)Math.Floor(diff.TotalSeconds);
-
-    }
-
-    private static void SendFileInfoWithAttributes(SshStreamWriter writer, FileInfo fileInfo)
+    private static void SendFSInfoWithAttributes(SshStreamWriter writer, FileSystemInfo fileInfo)
     {
         writer.Write(fileInfo.Name);
         SendAttributes(writer, new Attributes(fileInfo));
     }
+
     private static void SendAttributes(SshStreamWriter writer, Attributes attributes)
     {
-        writer.Write(attributes.Flags);
+        var flags = FileAttributeFlags.SIZE
+            | FileAttributeFlags.OWNERGROUP
+            | FileAttributeFlags.ACCESSTIME
+            | FileAttributeFlags.CREATETIME
+            | FileAttributeFlags.MODIFYTIME;
+        writer.Write(flags);
+        writer.Write(attributes.FileType);
         writer.Write(attributes.FileSize);
         writer.Write(attributes.Uid); // uid
         writer.Write(attributes.Gid); // gid
-        writer.Write(attributes.Permissions); // permissions
-        writer.Write(GetUnixFileTime(attributes.ATime)); //atime   
-        writer.Write(GetUnixFileTime(attributes.MTime)); //mtime
-        writer.Write((uint)0); // extended_count
-                               //string   extended_type blank
-                               //string   extended_data blank
+        writer.Write(attributes.ATime.ToUnixTimeSeconds()); //atime   
+        writer.Write(attributes.CTime.ToUnixTimeSeconds()); //ctime   
+        writer.Write(attributes.MTime.ToUnixTimeSeconds()); //mtime   
+        //writer.Write(0);  //extended type
+        //writer.Write(0);  //extended data
     }
 }
 
@@ -231,4 +230,8 @@ internal static class Dumper
 
     public static string Dump(byte[] data)
         => string.Join(" ", data.Select(b => b.ToString("X2")));
+
+    public static string DumpASCII(byte[] data)
+        => string.Join(" ", data.Select(b => (b >= 32 && b < 127 ? (char)b : '.').ToString().PadLeft(2)));
+
 }

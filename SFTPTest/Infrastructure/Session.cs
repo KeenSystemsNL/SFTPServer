@@ -1,3 +1,5 @@
-﻿namespace SFTPTest.Infrastructure;
+﻿using Microsoft.Extensions.Logging;
 
-internal record Session(SshStreamReader Reader, SshStreamWriter Writer, FileHandleCollection FileHandles);
+namespace SFTPTest.Infrastructure;
+
+internal record Session(SshStreamReader Reader, SshStreamWriter Writer, FileHandleCollection FileHandles, ILogger Logger);
