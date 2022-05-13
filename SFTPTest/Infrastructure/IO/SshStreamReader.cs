@@ -1,6 +1,6 @@
 ﻿using System.Text;
 
-namespace SFTPTest;
+namespace SFTPTest.Infrastructure.IO;
 
 public class SshStreamReader
 {
@@ -25,8 +25,8 @@ public class SshStreamReader
     public ulong ReadUInt64()
     {
         var data = ReadBinary(8);
-        return ((ulong)data[0] << 56 | (ulong)data[1] << 48 | (ulong)data[2] << 40 | (ulong)data[3] << 32 |
-                (ulong)data[4] << 24 | (ulong)data[5] << 16 | (ulong)data[6] << 8 | data[7]);
+        return (ulong)data[0] << 56 | (ulong)data[1] << 48 | (ulong)data[2] << 40 | (ulong)data[3] << 32 |
+                (ulong)data[4] << 24 | (ulong)data[5] << 16 | (ulong)data[6] << 8 | data[7];
     }
 
     public string ReadString(int length)

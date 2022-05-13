@@ -1,6 +1,5 @@
-﻿namespace SFTPTest;
+﻿namespace SFTPTest.Enums;
 
-// https://datatracker.ietf.org/doc/html/draft-ietf-secsh-filexfer-13#section-4.3
 public enum MessageType : byte
 {
     INIT = 0x01,
@@ -22,14 +21,13 @@ public enum MessageType : byte
     STAT = 0x11,
     RENAME = 0x12,
     READLINK = 0x13,
-    LINK = 0x15,
-    BLOCK = 0x16,
-    UNBLOCK = 0x17,
+
     STATUS = 0x65,
     HANDLE = 0x66,
     DATA = 0x67,
     NAME = 0x68,
     ATTRS = 0x69,
+
     EXTENDED = 0xC8,
     EXTENDED_REPLY = 0xC9
 }

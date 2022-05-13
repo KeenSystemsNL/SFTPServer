@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.Logging;
+using SFTPTest.Infrastructure.IO;
 
 namespace SFTPTest.Infrastructure;
 

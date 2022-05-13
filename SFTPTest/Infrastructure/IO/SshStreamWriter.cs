@@ -1,7 +1,8 @@
 ﻿using Microsoft.Extensions.Logging;
+using SFTPTest.Enums;
 using System.Text;
 
-namespace SFTPTest;
+namespace SFTPTest.Infrastructure.IO;
 
 public class SshStreamWriter
 {
@@ -20,6 +21,9 @@ public class SshStreamWriter
 
     public void Write(FileAttributeFlags flags)
         => Write((uint)flags);
+
+    public void Write(Permissions permissions)
+        => Write((uint)permissions);
 
     public void Write(FileType fileType)
         => Write((byte)fileType);

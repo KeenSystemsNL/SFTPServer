@@ -1,6 +1,8 @@
 ﻿using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using SFTPTest.Enums;
 using SFTPTest.Infrastructure;
+using SFTPTest.Infrastructure.IO;
 using System.Buffers.Binary;
 using System.Text;
 
@@ -203,6 +205,7 @@ public class Server : IServer
     {
         var flags = FileAttributeFlags.SIZE
             | FileAttributeFlags.OWNERGROUP
+            | FileAttributeFlags.PERMISSIONS
             | FileAttributeFlags.ACCESSTIME
             | FileAttributeFlags.CREATETIME
             | FileAttributeFlags.MODIFYTIME;
@@ -211,6 +214,7 @@ public class Server : IServer
         writer.Write(attributes.FileSize);
         writer.Write(attributes.Uid); // uid
         writer.Write(attributes.Gid); // gid
+        writer.Write(attributes.Permissions); // permissions
         writer.Write(attributes.ATime.ToUnixTimeSeconds()); //atime   
         writer.Write(attributes.CTime.ToUnixTimeSeconds()); //ctime   
         writer.Write(attributes.MTime.ToUnixTimeSeconds()); //mtime   

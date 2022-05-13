@@ -1,4 +1,4 @@
-﻿namespace SFTPTest;
+﻿namespace SFTPTest.Enums;
 
 [Flags]
 public enum FileAttributeFlags : uint
@@ -11,12 +11,5 @@ public enum FileAttributeFlags : uint
     ACL = 0x00000040,
     OWNERGROUP = 0x00000080,
     SUBSECOND_TIMES = 0x00000100,
-    BITS = 0x00000200,
-    ALLOCATION_SIZE = 0x00000400,
-    TEXT_HINT = 0x00000800,
-    MIME_TYPE = 0x00001000,
-    LINK_COUNT = 0x00002000,
-    UNTRANSLATED_NAME = 0x00004000,
-    CTIME = 0x00008000,
     EXTENDED = 0x80000000
 }
