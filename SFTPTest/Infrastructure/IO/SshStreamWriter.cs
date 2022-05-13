@@ -64,44 +64,16 @@ public class SshStreamWriter
 
     public void Write(string str)
     {
-        if (str == null)
+        if (str is null)
         {
             throw new ArgumentNullException(nameof(str));
         }
-        WriteBinary(_encoding.GetBytes(str));
+        Write((uint)str.Length);
+        Write(_encoding.GetBytes(str));
     }
 
-    public void Write(byte[] data)
-    {
-        if (data == null)
-        {
-            throw new ArgumentNullException(nameof(data));
-        }
-
-        _memorystream.Write(data, 0, data.Length);
-    }
-
-    public void WriteBinary(byte[] buffer)
-    {
-        if (buffer == null)
-        {
-            throw new ArgumentNullException(nameof(buffer));
-        }
-
-        Write((uint)buffer.Length);
-        _memorystream.Write(buffer, 0, buffer.Length);
-    }
-
-    public void WriteBinary(byte[] buffer, int offset, int count)
-    {
-        if (buffer == null)
-        {
-            throw new ArgumentNullException(nameof(buffer));
-        }
-
-        Write((uint)count);
-        _memorystream.Write(buffer, offset, count);
-    }
+    public void Write(ReadOnlySpan<byte> data)
+        => _memorystream.Write(data);
 
     public void Flush(ILogger logger)
     {

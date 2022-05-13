@@ -1,4 +1,5 @@
-﻿using System.Text;
+﻿using System.Buffers.Binary;
+using System.Text;
 
 namespace SFTPTest.Infrastructure.IO;
 
@@ -17,17 +18,12 @@ public class SshStreamReader
         => ReadBinary(1)[0];
 
     public uint ReadUInt32()
-    {
-        var data = ReadBinary(4);
-        return (uint)(data[0] << 24 | data[1] << 16 | data[2] << 8 | data[3]);
-    }
+        => BinaryPrimitives.ReadUInt32BigEndian(ReadBinary(4));
 
     public ulong ReadUInt64()
-    {
-        var data = ReadBinary(8);
-        return (ulong)data[0] << 56 | (ulong)data[1] << 48 | (ulong)data[2] << 40 | (ulong)data[3] << 32 |
-                (ulong)data[4] << 24 | (ulong)data[5] << 16 | (ulong)data[6] << 8 | data[7];
-    }
+        => BinaryPrimitives.ReadUInt64BigEndian(ReadBinary(8));
+    public long ReadInt64()
+        => BinaryPrimitives.ReadInt64BigEndian(ReadBinary(8));
 
     public string ReadString(int length)
         => _encoding.GetString(ReadBinary(length));

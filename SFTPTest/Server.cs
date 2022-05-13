@@ -23,6 +23,8 @@ public class Server : IServer
         { RequestType.OPENDIR, OpenDirHandler },
         { RequestType.READDIR, ReadDirHandler },
         { RequestType.CLOSE, CloseHandler },
+        { RequestType.OPEN, OpenHandler },
+        { RequestType.READ, ReadHandler },
     };
 
     public Server(IOptions<ServerOptions> options, ILogger<Server> logger)
@@ -36,9 +38,8 @@ public class Server : IServer
     {
         var reader = new SshStreamReader(@in);
         var writer = new SshStreamWriter(@out, _options.MaxMessageSize);
-        var session = new Session(reader, writer, new FileHandleCollection(), _options.Root, _logger);
+        Session? session = null;
         uint msglength;
-        var initdone = false;
         do
         {
             msglength = reader.ReadUInt32();
@@ -46,12 +47,11 @@ public class Server : IServer
             {
                 // Determine message type
                 var msgtype = (RequestType)reader.ReadByte();
-                if (!initdone && msgtype == RequestType.INIT)
+                if (session is null && msgtype is RequestType.INIT)
                 {
-                    InitHandler(session);
-                    initdone = true;
+                    session = InitHandler(reader, writer);
                 }
-                else if (initdone)
+                else if (session is not null)
                 {
                     // Get requestid
                     var requestid = reader.ReadUInt32();
@@ -73,13 +73,17 @@ public class Server : IServer
         } while (msglength > 0);
     }
 
-    private static void InitHandler(Session session)
+    private Session InitHandler(SshStreamReader reader, SshStreamWriter writer)
     {
         // Get client version
-        var clientversion = session.Reader.ReadUInt32();
-        // Send version response (v4)
-        session.Writer.Write(RequestType.VERSION);
-        session.Writer.Write(4);
+        var clientversion = reader.ReadUInt32();
+
+        var version = Math.Min(clientversion, 4);
+
+        // Send version response
+        writer.Write(RequestType.VERSION);
+        writer.Write(version);
+        return new Session(reader, writer, new FileHandleCollection(), new FileStreamCollection(), version, _options.Root, _logger);
     }
 
     private static void RealPathHandler(Session session, uint requestid)
@@ -109,7 +113,6 @@ public class Server : IServer
 
         session.Writer.Write(ResponseType.ATTRS);
         session.Writer.Write(requestid);
-
         SendAttributes(session.Writer, Attributes.Dummy);   //TODO: Return attributes for path
     }
 
@@ -120,10 +123,31 @@ public class Server : IServer
 
         session.Logger.LogInformation("Handle: {handle}, Flags: {flags}", handle, Convert.ToString(flags, 2));
 
-        session.Writer.Write(ResponseType.ATTRS);
-        session.Writer.Write(requestid);
 
-        SendAttributes(session.Writer, Attributes.Dummy);   //TODO: Return attributes for handle
+        if (session.FileHandles.TryGetValue(handle, out var file))
+        {
+            try
+            {
+                var fileinfo = new FileInfo(file);
+
+                session.Logger.LogInformation("File found: {fullpath}, size: {size}", fileinfo.FullName, fileinfo.Length);
+
+                session.Writer.Write(ResponseType.ATTRS);
+                session.Writer.Write(requestid);
+                SendAttributes(
+                    session.Writer,
+                    new Attributes(fileinfo)
+                );
+            }
+            catch
+            {
+                SendStatus(session.Writer, requestid, Status.FAILURE);
+            }
+        }
+        else
+        {
+            SendStatus(session.Writer, requestid, Status.INVALID_HANDLE);
+        }
     }
 
     private static void OpenDirHandler(Session session, uint requestid)
@@ -135,10 +159,51 @@ public class Server : IServer
 
         session.Logger.LogInformation("Path: {path}, Handle: {handle}", path, handle);
 
+        SendHandle(session.Writer, requestid, handle);
+    }
 
-        session.Writer.Write(ResponseType.HANDLE);
-        session.Writer.Write(requestid);
-        session.Writer.Write(handle);
+    private static void OpenHandler(Session session, uint requestid)
+    {
+        var filename = session.Reader.ReadString();
+        var flags = (AccessFlags)session.Reader.ReadUInt32();
+        var attrs = ReadAttributes(session.Reader);
+
+        var handle = GetHandle();
+        session.FileHandles.Add(handle, GetPath(session.Root, filename));
+        session.FileStreams.Add(handle, File.OpenRead(GetPath(session.Root, filename)));
+        SendHandle(session.Writer, requestid, handle);
+
+        session.Logger.LogInformation("File: {filename}, Flags: {flags}, Attrs: {attrs}", filename, Convert.ToString((uint)flags, 2), attrs);
+    }
+
+    private static void ReadHandler(Session session, uint requestid)
+    {
+        var handle = session.Reader.ReadString();
+        var offset = session.Reader.ReadUInt64();
+        var len = session.Reader.ReadUInt32();
+
+        session.Logger.LogInformation("Read {handle} from {offset}, {len} bytes", handle, offset, len);
+        if (session.FileStreams.TryGetValue(handle, out var stream))
+        {
+            if (offset < (ulong)stream.Length)
+            {
+                stream.Seek((long)offset, SeekOrigin.Begin);
+                var buff = new byte[len];
+                var bytesread = stream.Read(buff, 0, (int)len);
+
+                session.Writer.Write(ResponseType.DATA);
+                session.Writer.Write(requestid);
+                session.Writer.Write(buff.AsSpan().Slice(0, bytesread));
+            }
+            else
+            {
+                SendStatus(session.Writer, requestid, Status.EOF);
+            }
+        }
+        else
+        {
+            SendStatus(session.Writer, requestid, Status.INVALID_HANDLE);
+        }
     }
 
     private static void ReadDirHandler(Session session, uint requestid)
@@ -177,7 +242,22 @@ public class Server : IServer
 
         session.FileHandles.Remove(handle);
 
+        if (session.FileStreams.TryGetValue(handle, out var stream))
+        {
+            stream.Close();
+            stream.Dispose();
+        }
+        session.FileStreams.Remove(handle);
+
         SendStatus(session.Writer, requestId, Status.OK);
+    }
+
+    private static void SendHandle(SshStreamWriter writer, uint requestId, string handle)
+    {
+        writer.Write(ResponseType.HANDLE);
+        writer.Write(requestId);
+        writer.Write(handle);
+
     }
 
     private static void SendStatus(SshStreamWriter writer, uint requestId, Status status)
@@ -234,6 +314,34 @@ public class Server : IServer
         writer.Write(attributes.MTime.ToUnixTimeSeconds()); //mtime   
         //writer.Write(0);  //extended type
         //writer.Write(0);  //extended data
+    }
+
+    private static Attributes ReadAttributes(SshStreamReader reader)
+    {
+        var flags = (FileAttributeFlags)reader.ReadUInt32();
+        var type = (FileType)reader.ReadByte();
+        var size = flags.HasFlag(FileAttributeFlags.SIZE) ? reader.ReadUInt64() : 0;
+        var owner = flags.HasFlag(FileAttributeFlags.OWNERGROUP) ? reader.ReadString() : string.Empty;
+        var group = flags.HasFlag(FileAttributeFlags.OWNERGROUP) ? reader.ReadString() : string.Empty;
+        var permissions = flags.HasFlag(FileAttributeFlags.PERMISSIONS) ? (Permissions)reader.ReadUInt32() : Permissions.None;
+        var atime = (flags.HasFlag(FileAttributeFlags.ACCESSTIME)
+            ? DateTimeOffset.FromUnixTimeSeconds(reader.ReadInt64()) : DateTimeOffset.MinValue)
+            .AddMilliseconds((flags.HasFlag(FileAttributeFlags.SUBSECOND_TIMES) ? reader.ReadUInt32() : 0) * 10 ^ 6);
+        var ctime = (flags.HasFlag(FileAttributeFlags.CREATETIME)
+            ? DateTimeOffset.FromUnixTimeSeconds(reader.ReadInt64()) : DateTimeOffset.MinValue)
+            .AddMilliseconds((flags.HasFlag(FileAttributeFlags.SUBSECOND_TIMES) ? reader.ReadUInt32() : 0) * 10 ^ 6);
+        var mtime = (flags.HasFlag(FileAttributeFlags.MODIFYTIME)
+            ? DateTimeOffset.FromUnixTimeSeconds(reader.ReadInt64()) : DateTimeOffset.MinValue)
+            .AddMilliseconds((flags.HasFlag(FileAttributeFlags.SUBSECOND_TIMES) ? reader.ReadUInt32() : 0) * 10 ^ 6);
+        var acl = flags.HasFlag(FileAttributeFlags.ACL) ? reader.ReadString() : string.Empty;
+        var extended_count = flags.HasFlag(FileAttributeFlags.EXTENDED) ? reader.ReadUInt32() : 0;
+
+        if (extended_count > 0)
+        {
+            throw new Exception("Extended attributes currently not supported");
+        }
+
+        return new Attributes(type, size, owner, group, permissions, ctime, atime, mtime);
     }
 
     private static string GetPath(string root, string path)

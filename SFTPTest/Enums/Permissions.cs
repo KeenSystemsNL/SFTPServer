@@ -13,4 +13,7 @@ public enum Permissions : uint
     Owner_Execute = 0b001000000,
     Owner_Write = 0b010000000,
     Owner_Read = 0b100000000,
+    Sticky = 0b1000000000,
+    SetGID = 0b10000000000,
+    SetUID = 0b100000000000
 }
