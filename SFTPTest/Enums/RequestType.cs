@@ -1,6 +1,6 @@
 ﻿namespace SFTPTest.Enums;
 
-public enum MessageType : byte
+public enum RequestType : byte
 {
     INIT = 0x01,
     VERSION = 0x02,
@@ -22,12 +22,5 @@ public enum MessageType : byte
     RENAME = 0x12,
     READLINK = 0x13,
 
-    STATUS = 0x65,
-    HANDLE = 0x66,
-    DATA = 0x67,
-    NAME = 0x68,
-    ATTRS = 0x69,
-
-    EXTENDED = 0xC8,
-    EXTENDED_REPLY = 0xC9
+    EXTENDED = 0xC8
 }

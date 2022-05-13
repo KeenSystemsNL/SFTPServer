@@ -2,4 +2,4 @@
 
 namespace SFTPTest.Infrastructure;
 
-internal class MessageHandlerCollection : NonNullableDictionary<MessageType, MessageHandler> { }
+internal class MessageHandlerCollection : NonNullableDictionary<RequestType, MessageHandler> { }

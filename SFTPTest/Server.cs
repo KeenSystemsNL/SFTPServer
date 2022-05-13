@@ -16,12 +16,13 @@ public class Server : IServer
     private static readonly MessageHandlerCollection _messagehandlers = new()
     {
         //{ MessageType.INIT, InitHandler }, // Handled separately
-        { MessageType.REALPATH, RealPathHandler },
-        { MessageType.STAT, StatHandler },
-        { MessageType.LSTAT, LStatHandler },
-        { MessageType.OPENDIR, OpenDirHandler },
-        { MessageType.READDIR, ReadDirHandler },
-        { MessageType.CLOSE, CloseHandler },
+        { RequestType.REALPATH, RealPathHandler },
+        { RequestType.STAT, StatHandler },
+        { RequestType.LSTAT, LStatHandler },
+        { RequestType.FSTAT, FStatHandler },
+        { RequestType.OPENDIR, OpenDirHandler },
+        { RequestType.READDIR, ReadDirHandler },
+        { RequestType.CLOSE, CloseHandler },
     };
 
     public Server(IOptions<ServerOptions> options, ILogger<Server> logger)
@@ -44,8 +45,8 @@ public class Server : IServer
             if (msglength > 0)
             {
                 // Determine message type
-                var msgtype = (MessageType)reader.ReadByte();
-                if (!initdone && msgtype == MessageType.INIT)
+                var msgtype = (RequestType)reader.ReadByte();
+                if (!initdone && msgtype == RequestType.INIT)
                 {
                     InitHandler(session, 0);
                     initdone = true;
@@ -77,7 +78,7 @@ public class Server : IServer
         // Get client version
         var clientversion = session.Reader.ReadUInt32();
         // Send version response (v4)
-        session.Writer.Write(MessageType.VERSION);
+        session.Writer.Write(RequestType.VERSION);
         session.Writer.Write(4);
     }
 
@@ -90,7 +91,7 @@ public class Server : IServer
         }
 
         session.Logger.LogInformation("Path: {path}", path);
-        session.Writer.Write(MessageType.NAME);
+        session.Writer.Write(ResponseType.NAME);
         session.Writer.Write(requestid);
         session.Writer.Write(1);
         SendFSInfoWithAttributes(session.Writer, new VirtualPath(path));
@@ -106,10 +107,23 @@ public class Server : IServer
 
         session.Logger.LogInformation("Path: {path}", path);
 
-        session.Writer.Write(MessageType.ATTRS);
+        session.Writer.Write(ResponseType.ATTRS);
         session.Writer.Write(requestid);
 
-        SendAttributes(session.Writer, Attributes.Dummy);
+        SendAttributes(session.Writer, Attributes.Dummy);   //TODO: Return attributes for path
+    }
+
+    private static void FStatHandler(Session session, uint requestid)
+    {
+        var handle = session.Reader.ReadString();
+        var flags = session.Reader.ReadUInt32();
+
+        session.Logger.LogInformation("Handle: {handle}", handle);
+
+        session.Writer.Write(ResponseType.ATTRS);
+        session.Writer.Write(requestid);
+
+        SendAttributes(session.Writer, Attributes.Dummy);   //TODO: Return attributes for handle
     }
 
     private static void OpenDirHandler(Session session, uint requestid)
@@ -122,7 +136,7 @@ public class Server : IServer
         session.Logger.LogInformation("Path: {path}, Handle: {handle}", path, handle);
 
 
-        session.Writer.Write(MessageType.HANDLE);
+        session.Writer.Write(ResponseType.HANDLE);
         session.Writer.Write(requestid);
         session.Writer.Write(handle);
     }
@@ -137,7 +151,7 @@ public class Server : IServer
 
             var allfiles = new DirectoryInfo(@"D:\test").GetFileSystemInfos().OrderBy(f => f.Name).ToArray();
 
-            session.Writer.Write(MessageType.NAME);
+            session.Writer.Write(ResponseType.NAME);
             session.Writer.Write(requestid);
             session.Writer.Write(allfiles.Length); // all files at the same time
 
@@ -171,7 +185,7 @@ public class Server : IServer
 
     private static void SendStatus(SshStreamWriter writer, uint requestId, Status status, string errorMessage, string languageTag)
     {
-        writer.Write(MessageType.STATUS);
+        writer.Write(ResponseType.STATUS);
         writer.Write(requestId);
         writer.Write(status);
         writer.Write(errorMessage);

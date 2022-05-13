@@ -1,6 +1,6 @@
 ﻿namespace SFTPTest.Enums;
 
-public enum FileType
+public enum FileType : byte
 {
     REGULAR = 1,
     DIRECTORY = 2,

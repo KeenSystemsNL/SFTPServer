@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.Logging;
 using SFTPTest.Enums;
+using System.Buffers.Binary;
 using System.Text;
 
 namespace SFTPTest.Infrastructure.IO;
@@ -16,11 +17,14 @@ public class SshStreamWriter
         _memorystream = new MemoryStream(bufferSize);
     }
 
-    public void Write(MessageType messageType)
-        => Write((byte)messageType);
+    public void Write(RequestType requestType)
+        => Write((byte)requestType);
 
-    public void Write(FileAttributeFlags flags)
-        => Write((uint)flags);
+    public void Write(ResponseType responseType)
+        => Write((byte)responseType);
+
+    public void Write(FileAttributeFlags fileAttributeFlags)
+        => Write((uint)fileAttributeFlags);
 
     public void Write(Permissions permissions)
         => Write((uint)permissions);
@@ -31,12 +35,12 @@ public class SshStreamWriter
     public void Write(Status status)
         => Write((uint)status);
 
+
     public void Write(bool value)
         => _memorystream.WriteByte(value ? (byte)1 : (byte)0);
 
     public void Write(byte value)
         => _memorystream.WriteByte(value);
-
 
     public void Write(int value)
         => Write((uint)value);
@@ -46,16 +50,15 @@ public class SshStreamWriter
 
     public void Write(uint value)
     {
-        var bytes = new[] { (byte)(value >> 24), (byte)(value >> 16), (byte)(value >> 8), (byte)(value & 0xFF) };
+        var bytes = new byte[4];
+        BinaryPrimitives.WriteUInt32BigEndian(bytes, value);
         _memorystream.Write(bytes, 0, 4);
     }
 
     public void Write(ulong value)
     {
-        var bytes = new[] {
-                (byte)(value >> 56), (byte)(value >> 48), (byte)(value >> 40), (byte)(value >> 32),
-                (byte)(value >> 24), (byte)(value >> 16), (byte)(value >> 8), (byte)(value & 0xFF)
-            };
+        var bytes = new byte[8];
+        BinaryPrimitives.WriteUInt64BigEndian(bytes, value);
         _memorystream.Write(bytes, 0, 8);
     }
 
@@ -107,7 +110,8 @@ public class SshStreamWriter
         logger.LogInformation("Writing: {data}", Dumper.Dump(data));
         logger.LogInformation("Writing: {data}", Dumper.DumpASCII(data));
 
-        var len = new[] { (byte)(data.Length >> 24), (byte)(data.Length >> 16), (byte)(data.Length >> 8), (byte)(data.Length & 0xFF) };
+        var len = new byte[4];
+        BinaryPrimitives.WriteUInt32BigEndian(len, (uint)data.Length);
 
         var packet = len.Concat(data).ToArray();
 
