@@ -36,7 +36,7 @@ public class Server : IServer
     {
         var reader = new SshStreamReader(@in);
         var writer = new SshStreamWriter(@out, _options.MaxMessageSize);
-        var session = new Session(reader, writer, new FileHandleCollection(), _logger);
+        var session = new Session(reader, writer, new FileHandleCollection(), _options.Root, _logger);
         uint msglength;
         var initdone = false;
         do
@@ -48,7 +48,7 @@ public class Server : IServer
                 var msgtype = (RequestType)reader.ReadByte();
                 if (!initdone && msgtype == RequestType.INIT)
                 {
-                    InitHandler(session, 0);
+                    InitHandler(session);
                     initdone = true;
                 }
                 else if (initdone)
@@ -73,7 +73,7 @@ public class Server : IServer
         } while (msglength > 0);
     }
 
-    private static void InitHandler(Session session, uint requestid)
+    private static void InitHandler(Session session)
     {
         // Get client version
         var clientversion = session.Reader.ReadUInt32();
@@ -105,7 +105,7 @@ public class Server : IServer
         var path = session.Reader.ReadString();
         var flags = session.Reader.ReadUInt32();
 
-        session.Logger.LogInformation("Path: {path}", path);
+        session.Logger.LogInformation("Path: {path}, Flags: {flags}", path, Convert.ToString(flags, 2));
 
         session.Writer.Write(ResponseType.ATTRS);
         session.Writer.Write(requestid);
@@ -118,7 +118,7 @@ public class Server : IServer
         var handle = session.Reader.ReadString();
         var flags = session.Reader.ReadUInt32();
 
-        session.Logger.LogInformation("Handle: {handle}", handle);
+        session.Logger.LogInformation("Handle: {handle}, Flags: {flags}", handle, Convert.ToString(flags, 2));
 
         session.Writer.Write(ResponseType.ATTRS);
         session.Writer.Write(requestid);
@@ -131,7 +131,7 @@ public class Server : IServer
         var path = session.Reader.ReadString();
 
         var handle = GetHandle();
-        session.FileHandles.Add(handle, path);
+        session.FileHandles.Add(handle, GetPath(session.Root, path));
 
         session.Logger.LogInformation("Path: {path}, Handle: {handle}", path, handle);
 
@@ -149,7 +149,7 @@ public class Server : IServer
         {
             session.Logger.LogInformation("Path: {path}, Handle: {handle}", path, handle);
 
-            var allfiles = new DirectoryInfo(@"D:\test").GetFileSystemInfos().OrderBy(f => f.Name).ToArray();
+            var allfiles = new DirectoryInfo(path).GetFileSystemInfos().OrderBy(f => f.Name).ToArray();
 
             session.Writer.Write(ResponseType.NAME);
             session.Writer.Write(requestid);
@@ -234,6 +234,12 @@ public class Server : IServer
         writer.Write(attributes.MTime.ToUnixTimeSeconds()); //mtime   
         //writer.Write(0);  //extended type
         //writer.Write(0);  //extended data
+    }
+
+    private static string GetPath(string root, string path)
+    {
+        var result = Path.GetFullPath(Path.Combine(root, path.TrimStart('/'))).Replace('/', '\\');
+        return result.StartsWith(root) ? result : root;
     }
 }
 
