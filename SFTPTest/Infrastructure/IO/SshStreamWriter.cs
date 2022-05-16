@@ -44,6 +44,16 @@ public class SshStreamWriter
     public void Write(Status status)
         => Write((uint)status);
 
+    public void Write(IReadOnlyCollection<FileSystemInfo> fileSystemInfos)
+    {
+        Write(fileSystemInfos.Count);
+
+        foreach (var file in fileSystemInfos)
+        {
+            Write(file);
+        }
+    }
+
     public void Write(Attributes attributes, FileAttributeFlags flags = FileAttributeFlags.DEFAULT)
     {
         Write(flags);

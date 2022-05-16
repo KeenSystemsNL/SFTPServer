@@ -101,8 +101,7 @@ public class Server : IServer
         session.Logger.LogInformation("Path: {path}", path);
         session.Writer.Write(ResponseType.NAME);
         session.Writer.Write(requestid);
-        session.Writer.Write(1);
-        session.Writer.Write(new VirtualPath(path));
+        session.Writer.Write(new[] { new VirtualPath(path) });
     }
 
     private static void StatHandler(Session session, uint requestid)
@@ -137,6 +136,7 @@ public class Server : IServer
         var attrs = session.Reader.ReadAttributes();
 
         DoStat(session, requestid, path, attrs);
+        SendStatus(session, requestid, Status.OK);
     }
 
     private static void FSetStatHandler(Session session, uint requestid)
@@ -147,6 +147,7 @@ public class Server : IServer
         if (session.FileHandles.TryGetValue(handle, out var path))
         {
             DoStat(session, requestid, path, attrs);
+            SendStatus(session, requestid, Status.OK);
         }
         else
         {
@@ -212,15 +213,18 @@ public class Server : IServer
     private static void WriteHandler(Session session, uint requestid)
     {
         var handle = session.Reader.ReadString();
-        var offset = session.Reader.ReadUInt64();
+        var offset = (long)session.Reader.ReadUInt64();
+        var data = session.Reader.ReadBinary();
 
-        session.Logger.LogInformation("Write {handle} from {offset}", handle, offset);
+        session.Logger.LogInformation("Write {handle} from {offset}, {length} bytes", handle, offset, data.Length);
         if (session.FileStreams.TryGetValue(handle, out var stream))
         {
-            var data = session.Reader.ReadBinary();
-
-            stream.Seek((long)offset, SeekOrigin.Begin);
+            if (stream.Position != offset)
+            {
+                stream.Seek(offset, SeekOrigin.Begin);
+            }
             stream.Write(data, 0, data.Length);
+            SendStatus(session, requestid, Status.OK);
         }
         else
         {
@@ -236,16 +240,9 @@ public class Server : IServer
         {
             session.Logger.LogInformation("Path: {path}, Handle: {handle}", path, handle);
 
-            var allfiles = new DirectoryInfo(path).GetFileSystemInfos().OrderBy(f => f.Name).ToArray();
-
             session.Writer.Write(ResponseType.NAME);
             session.Writer.Write(requestid);
-            session.Writer.Write(allfiles.Length); // all files at the same time
-
-            foreach (var file in allfiles)
-            {
-                session.Writer.Write(file);
-            }
+            session.Writer.Write(new DirectoryInfo(path).GetFileSystemInfos().OrderBy(f => f.Name).ToArray());
             session.Writer.Write(true); // End of list
 
             session.FileHandles.Remove(handle);
@@ -343,8 +340,15 @@ public class Server : IServer
     private static void DoStat(Session session, uint requestid, string path, Attributes attributes)
     {
         session.Logger.LogInformation("Stat: {path}, attributes: {flags}", path, attributes);
+
+        //if (attributes.LastModifiedTime != DateTimeOffset.MinValue)
+        //{
+        //    session.Logger.LogInformation("Setting MTime {path} to {mtime}", path, attributes.LastModifiedTime.UtcDateTime);
+        //    File.SetLastWriteTimeUtc(path, attributes.LastModifiedTime.UtcDateTime);
+        //}
+
         //TODO: implement
-        SendStatus(session, requestid, Status.OK);
+        session.Logger.LogInformation("--TODO--");
     }
 
     private static void SendHandle(Session session, uint requestId, string handle)
