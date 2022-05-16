@@ -39,8 +39,13 @@ public class SshStreamReader
         => (FileAttributeFlags)ReadUInt32();
 
     public DateTimeOffset ReadTime(bool subseconds)
-        => DateTimeOffset.FromUnixTimeSeconds(ReadInt64())
-            .AddMilliseconds((subseconds ? ReadUInt32() : 0) * 10 ^ 6);
+    {
+        var seconds = ReadInt64();
+        return seconds > 0
+            ? DateTimeOffset.FromUnixTimeSeconds(seconds)
+                .AddMilliseconds((subseconds ? ReadUInt32() : 0) * 10 ^ 6)
+            : DateTimeOffset.MinValue;
+    }
 
     public Attributes ReadAttributes()
     {
@@ -50,9 +55,9 @@ public class SshStreamReader
         var owner = flags.HasFlag(FileAttributeFlags.OWNERGROUP) ? ReadString() : string.Empty;
         var group = flags.HasFlag(FileAttributeFlags.OWNERGROUP) ? ReadString() : string.Empty;
         var permissions = flags.HasFlag(FileAttributeFlags.PERMISSIONS) ? (Permissions)ReadUInt32() : Permissions.None;
-        var atime = flags.HasFlag(FileAttributeFlags.ACCESSTIME) ? ReadTime(flags.HasFlag(FileAttributeFlags.SUBSECOND_TIMES)) : DateTime.MinValue;
-        var ctime = flags.HasFlag(FileAttributeFlags.CREATETIME) ? ReadTime(flags.HasFlag(FileAttributeFlags.SUBSECOND_TIMES)) : DateTime.MinValue;
-        var mtime = flags.HasFlag(FileAttributeFlags.MODIFYTIME) ? ReadTime(flags.HasFlag(FileAttributeFlags.SUBSECOND_TIMES)) : DateTime.MinValue;
+        var atime = flags.HasFlag(FileAttributeFlags.ACCESSTIME) ? ReadTime(flags.HasFlag(FileAttributeFlags.SUBSECOND_TIMES)) : DateTimeOffset.MinValue;
+        var ctime = flags.HasFlag(FileAttributeFlags.CREATETIME) ? ReadTime(flags.HasFlag(FileAttributeFlags.SUBSECOND_TIMES)) : DateTimeOffset.MinValue;
+        var mtime = flags.HasFlag(FileAttributeFlags.MODIFYTIME) ? ReadTime(flags.HasFlag(FileAttributeFlags.SUBSECOND_TIMES)) : DateTimeOffset.MinValue;
         var acls = flags.HasFlag(FileAttributeFlags.ACL) ? ReadACLs() : Array.Empty<ACL>();
         var extended_count = flags.HasFlag(FileAttributeFlags.EXTENDED) ? ReadUInt32() : 0;
 
