@@ -107,6 +107,12 @@ public class SshStreamWriter
         }
     }
 
+    public void Write(FileSystemInfo fileInfo)
+    {
+        Write(fileInfo.Name);
+        Write(new Attributes(fileInfo));
+    }
+
     public void Write(bool value)
         => _memorystream.WriteByte(value ? (byte)1 : (byte)0);
 

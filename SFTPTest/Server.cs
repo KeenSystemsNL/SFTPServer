@@ -3,8 +3,6 @@ using Microsoft.Extensions.Options;
 using SFTPTest.Enums;
 using SFTPTest.Infrastructure;
 using SFTPTest.Infrastructure.IO;
-using System.Buffers.Binary;
-using System.Text;
 
 namespace SFTPTest;
 
@@ -39,7 +37,6 @@ public class Server : IServer
         _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
-
 
     public void Run(Stream @in, Stream @out)
     {
@@ -105,7 +102,7 @@ public class Server : IServer
         session.Writer.Write(ResponseType.NAME);
         session.Writer.Write(requestid);
         session.Writer.Write(1);
-        SendFSInfoWithAttributes(session, new VirtualPath(path));
+        session.Writer.Write(new VirtualPath(path));
     }
 
     private static void StatHandler(Session session, uint requestid)
@@ -165,7 +162,6 @@ public class Server : IServer
         session.FileHandles.Add(handle, GetPath(session, path));
 
         session.Logger.LogInformation("Path: {path}, Handle: {handle}", path, handle);
-
         SendHandle(session, requestid, handle);
     }
 
@@ -175,20 +171,12 @@ public class Server : IServer
         var flags = session.Reader.ReadAccessFlags();
         var attrs = session.Reader.ReadAttributes();
 
-        if (TryParsePFlags(flags, out var filemode, out var fileaccess))
-        {
-            var handle = GetHandle();
-            session.FileStreams.Add(handle, File.Open(GetPath(session, filename), filemode, fileaccess, FileShare.ReadWrite));
-            session.FileHandles.Add(handle, GetPath(session, filename));
-            SendHandle(session, requestid, handle);
-        }
-        else
-        {
-            SendStatus(session, requestid, Status.FAILURE);
-        }
+        var handle = GetHandle();
+        session.FileStreams.Add(handle, File.Open(GetPath(session, filename), flags.ToFileMode(), flags.ToFileAccess(), FileShare.ReadWrite));
+        session.FileHandles.Add(handle, GetPath(session, filename));
 
-
-        session.Logger.LogInformation("File: {filename}, Flags: {flags}, Attrs: {attrs}", filename, Convert.ToString((uint)flags, 2), attrs);
+        session.Logger.LogInformation("File: {filename}, Flags: {flags}, Attrs: {attrs}", filename, flags, attrs);
+        SendHandle(session, requestid, handle);
     }
 
     private static void ReadHandler(Session session, uint requestid)
@@ -256,7 +244,7 @@ public class Server : IServer
 
             foreach (var file in allfiles)
             {
-                SendFSInfoWithAttributes(session, file);
+                session.Writer.Write(file);
             }
             session.Writer.Write(true); // End of list
 
@@ -352,17 +340,18 @@ public class Server : IServer
     }
 
 
+    private static void DoStat(Session session, uint requestid, string path, Attributes attributes)
+    {
+        session.Logger.LogInformation("Stat: {path}, attributes: {flags}", path, attributes);
+        //TODO: implement
+        SendStatus(session, requestid, Status.OK);
+    }
+
     private static void SendHandle(Session session, uint requestId, string handle)
     {
         session.Writer.Write(ResponseType.HANDLE);
         session.Writer.Write(requestId);
         session.Writer.Write(handle);
-    }
-
-    private static void DoStat(Session session, uint requestid, string path, Attributes attributes)
-    {
-        session.Logger.LogInformation("Stat: {path}, attributes: {flags}", path, attributes);
-        SendStatus(session, requestid, Status.OK);
     }
 
     private static void SendStat(Session session, uint requestid, string path, FileAttributeFlags flags)
@@ -406,72 +395,12 @@ public class Server : IServer
             _ => "Unknown error"
         };
 
-    private static string GetHandle() => Guid.NewGuid().ToString("N");
-
-    private static void SendFSInfoWithAttributes(Session session, FileSystemInfo fileInfo)
-    {
-        session.Writer.Write(fileInfo.Name);
-        session.Writer.Write(new Attributes(fileInfo));
-    }
-
-    private static bool TryParsePFlags(AccessFlags pflags, out FileMode fileMode, out FileAccess fileAccess)
-    {
-        fileMode = FileMode.Open;
-        fileAccess = FileAccess.Read;
-
-        if (pflags.HasFlag(AccessFlags.READ) && pflags.HasFlag(AccessFlags.WRITE))
-        {
-            fileAccess = FileAccess.ReadWrite;
-        }
-        else if (pflags.HasFlag(AccessFlags.READ))
-        {
-            fileAccess = FileAccess.Read;
-        }
-        else if (pflags.HasFlag(AccessFlags.WRITE))
-        {
-            fileAccess = FileAccess.Write;
-        }
-
-        if (pflags.HasFlag(AccessFlags.APPEND))
-        {
-            fileMode = FileMode.Append;
-        }
-        else if (pflags.HasFlag(AccessFlags.CREATE))
-        {
-            fileMode = FileMode.OpenOrCreate;
-        }
-        else if (pflags.HasFlag(AccessFlags.TRUNCATE))
-        {
-            fileMode = FileMode.CreateNew;
-        }
-        else if (pflags.HasFlag(AccessFlags.EXCL))
-        {
-            throw new NotImplementedException();
-        }
-
-        return true;
-    }
+    private static string GetHandle()
+        => Guid.NewGuid().ToString("N");
 
     private static string GetPath(Session session, string path)
     {
         var result = Path.GetFullPath(Path.Combine(session.Root, path.TrimStart('/'))).Replace('/', '\\');
         return result.StartsWith(session.Root) ? result : session.Root;
     }
-}
-
-
-internal static class Dumper
-{
-    public static string Dump(uint data)
-        => Dump(BitConverter.GetBytes(BinaryPrimitives.ReverseEndianness(data)));
-
-    public static string Dump(string data)
-        => Dump(Encoding.UTF8.GetBytes(data));
-
-    public static string Dump(byte[] data)
-        => string.Join(" ", data.Select(b => b.ToString("X2")));
-
-    public static string DumpASCII(byte[] data)
-        => string.Join(" ", data.Select(b => (b >= 32 && b < 127 ? (char)b : '.').ToString().PadLeft(2)));
-
 }
