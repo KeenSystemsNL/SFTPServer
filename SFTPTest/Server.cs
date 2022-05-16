@@ -25,6 +25,10 @@ public class Server : IServer
         { RequestType.CLOSE, CloseHandler },
         { RequestType.OPEN, OpenHandler },
         { RequestType.READ, ReadHandler },
+        { RequestType.REMOVE, RemoveHandler },
+        { RequestType.RENAME, RenameHandler },
+        { RequestType.MKDIR, MakeDirHandler },
+        { RequestType.RMDIR, RemoveDirHandler },
     };
 
     public Server(IOptions<ServerOptions> options, ILogger<Server> logger)
@@ -252,6 +256,72 @@ public class Server : IServer
         SendStatus(session.Writer, requestId, Status.OK);
     }
 
+    private static void RemoveHandler(Session session, uint requestid)
+    {
+        var filename = GetPath(session.Root, session.Reader.ReadString());
+
+        session.Logger.LogInformation("DELETE: {filename}", filename);
+        try
+        {
+            File.Delete(filename);
+            SendStatus(session.Writer, requestid, Status.OK);
+        }
+        catch
+        {
+            SendStatus(session.Writer, requestid, Status.FAILURE);  // TODO: Return (more) correct status like NO_SUCH_FILE or PERMISSION_DENIED etc.
+        }
+    }
+
+    private static void RenameHandler(Session session, uint requestid)
+    {
+        var oldfilename = GetPath(session.Root, session.Reader.ReadString());
+        var newfilename = GetPath(session.Root, session.Reader.ReadString());
+
+        session.Logger.LogInformation("RENAME: {oldfilename} -> {newfilename}", oldfilename, newfilename);
+        try
+        {
+            File.Move(oldfilename, newfilename);
+            SendStatus(session.Writer, requestid, Status.OK);
+        }
+        catch
+        {
+            SendStatus(session.Writer, requestid, Status.FAILURE);  // TODO: Return (more) correct status like NO_SUCH_FILE or PERMISSION_DENIED etc.
+        }
+    }
+
+    private static void MakeDirHandler(Session session, uint requestid)
+    {
+        var name = GetPath(session.Root, session.Reader.ReadString());
+        var attrs = ReadAttributes(session.Reader);
+
+        session.Logger.LogInformation("MAKEDIR: {name} [{attributes}]", name, attrs);
+        try
+        {
+            Directory.CreateDirectory(name);
+            SendStatus(session.Writer, requestid, Status.OK);
+        }
+        catch
+        {
+            SendStatus(session.Writer, requestid, Status.FAILURE);  // TODO: Return (more) correct status like NO_SUCH_FILE or PERMISSION_DENIED etc.
+        }
+    }
+
+    private static void RemoveDirHandler(Session session, uint requestid)
+    {
+        var name = GetPath(session.Root, session.Reader.ReadString());
+        session.Logger.LogInformation("REMOVEDIR: {name}", name);
+        try
+        {
+            Directory.Delete(name);
+            SendStatus(session.Writer, requestid, Status.OK);
+        }
+        catch
+        {
+            SendStatus(session.Writer, requestid, Status.FAILURE);  // TODO: Return (more) correct status like NO_SUCH_FILE or PERMISSION_DENIED etc.
+        }
+    }
+
+
     private static void SendHandle(SshStreamWriter writer, uint requestId, string handle)
     {
         writer.Write(ResponseType.HANDLE);
@@ -306,12 +376,12 @@ public class Server : IServer
         writer.Write(flags);
         writer.Write(attributes.FileType);
         writer.Write(attributes.FileSize);
-        writer.Write(attributes.Uid); // uid
-        writer.Write(attributes.Gid); // gid
-        writer.Write(attributes.Permissions); // permissions
-        writer.Write(attributes.ATime.ToUnixTimeSeconds()); //atime   
-        writer.Write(attributes.CTime.ToUnixTimeSeconds()); //ctime   
-        writer.Write(attributes.MTime.ToUnixTimeSeconds()); //mtime   
+        writer.Write(attributes.Uid);
+        writer.Write(attributes.Gid);
+        writer.Write(attributes.Permissions);
+        writer.Write(attributes.ATime.ToUnixTimeSeconds());
+        writer.Write(attributes.CTime.ToUnixTimeSeconds());
+        writer.Write(attributes.MTime.ToUnixTimeSeconds());
         //writer.Write(0);  //extended type
         //writer.Write(0);  //extended data
     }

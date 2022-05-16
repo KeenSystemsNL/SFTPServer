@@ -79,15 +79,15 @@ public class SshStreamWriter
     {
         var data = _memorystream.ToArray();
 
-        logger.LogInformation("Writing: {data}", Dumper.Dump(data));
-        logger.LogInformation("Writing: {data}", Dumper.DumpASCII(data));
+        logger.LogInformation("Writing [{length}]: {data}", data.Length, Dumper.Dump(data));
+        logger.LogInformation("Writing [{length}]: {data}", data.Length, Dumper.DumpASCII(data));
 
         var len = new byte[4];
         BinaryPrimitives.WriteUInt32BigEndian(len, (uint)data.Length);
 
-        var packet = len.Concat(data).ToArray();
+        _stream.Write(len, 0, len.Length);
+        _stream.Write(data, 0, data.Length);
 
-        _stream.Write(packet, 0, packet.Length);
         _memorystream.Position = 0;
         _memorystream.SetLength(0);
     }
