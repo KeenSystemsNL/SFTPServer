@@ -29,12 +29,83 @@ public class SshStreamWriter
     public void Write(Permissions permissions)
         => Write((uint)permissions);
 
+    public void Write(ACEType aceType)
+        => Write((uint)aceType);
+
+    public void Write(ACEFlags aceFlags)
+    => Write((uint)aceFlags);
+
+    public void Write(ACEMask aceMask)
+    => Write((uint)aceMask);
+
     public void Write(FileType fileType)
         => Write((byte)fileType);
 
     public void Write(Status status)
         => Write((uint)status);
 
+    public void Write(Attributes attributes, FileAttributeFlags flags = FileAttributeFlags.DEFAULT)
+    {
+        Write(flags);
+        Write(attributes.FileType);
+        if (flags.HasFlag(FileAttributeFlags.SIZE))
+        {
+            Write(attributes.FileSize);
+        }
+
+        if (flags.HasFlag(FileAttributeFlags.OWNERGROUP))
+        {
+            Write(attributes.Uid);
+            Write(attributes.Gid);
+        }
+        if (flags.HasFlag(FileAttributeFlags.PERMISSIONS))
+        {
+            Write(attributes.Permissions);
+        }
+
+        if (flags.HasFlag(FileAttributeFlags.ACCESSTIME))
+        {
+            Write(attributes.LastAccessedTime, flags.HasFlag(FileAttributeFlags.SUBSECOND_TIMES));
+        }
+
+        if (flags.HasFlag(FileAttributeFlags.CREATETIME))
+        {
+            Write(attributes.CreationTime, flags.HasFlag(FileAttributeFlags.SUBSECOND_TIMES));
+        }
+
+        if (flags.HasFlag(FileAttributeFlags.MODIFYTIME))
+        {
+            Write(attributes.LastModifiedTime, flags.HasFlag(FileAttributeFlags.SUBSECOND_TIMES));
+        }
+
+        if (flags.HasFlag(FileAttributeFlags.ACL))
+        {
+            Write(attributes.ACLs);
+        }
+        //Write(0);  //extended type
+        //Write(0);  //extended data
+    }
+
+    public void Write(DateTimeOffset dateTime, bool subseconds)
+    {
+        Write(dateTime.ToUnixTimeSeconds());
+        if (subseconds)
+        {
+            Write(dateTime.Millisecond * 10 ^ 6);
+        }
+    }
+
+    public void Write(ACL[] acls)
+    {
+        Write(acls.Length);
+        foreach (var acl in acls)
+        {
+            Write(acl.ACEType);
+            Write(acl.ACEFlags);
+            Write(acl.ACEMask);
+            Write(acl.Who);
+        }
+    }
 
     public void Write(bool value)
         => _memorystream.WriteByte(value ? (byte)1 : (byte)0);

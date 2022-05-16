@@ -20,11 +20,14 @@ public class Server : IServer
         { RequestType.STAT, StatHandler },
         { RequestType.LSTAT, LStatHandler },
         { RequestType.FSTAT, FStatHandler },
+        { RequestType.SETSTAT, SetStatHandler },
+        { RequestType.FSETSTAT, FSetStatHandler },
         { RequestType.OPENDIR, OpenDirHandler },
         { RequestType.READDIR, ReadDirHandler },
         { RequestType.CLOSE, CloseHandler },
         { RequestType.OPEN, OpenHandler },
         { RequestType.READ, ReadHandler },
+        { RequestType.WRITE, WriteHandler },
         { RequestType.REMOVE, RemoveHandler },
         { RequestType.RENAME, RenameHandler },
         { RequestType.MKDIR, MakeDirHandler },
@@ -62,7 +65,7 @@ public class Server : IServer
                     _logger.LogInformation("{msgtype} [{request}]", msgtype, Dumper.Dump(requestid));
                     if (!_messagehandlers.TryGetValue(msgtype, out var handler))
                     {
-                        SendStatus(session.Writer, requestid, Status.OP_UNSUPPORTED);
+                        SendStatus(session, requestid, Status.OP_UNSUPPORTED);
                     }
                     else
                     {
@@ -102,7 +105,7 @@ public class Server : IServer
         session.Writer.Write(ResponseType.NAME);
         session.Writer.Write(requestid);
         session.Writer.Write(1);
-        SendFSInfoWithAttributes(session.Writer, new VirtualPath(path));
+        SendFSInfoWithAttributes(session, new VirtualPath(path));
     }
 
     private static void StatHandler(Session session, uint requestid)
@@ -111,46 +114,46 @@ public class Server : IServer
     private static void LStatHandler(Session session, uint requestid)
     {
         var path = session.Reader.ReadString();
-        var flags = session.Reader.ReadUInt32();
+        var flags = session.Reader.ReadFileAttributeFlags();
 
-        session.Logger.LogInformation("Path: {path}, Flags: {flags}", path, Convert.ToString(flags, 2));
-
-        session.Writer.Write(ResponseType.ATTRS);
-        session.Writer.Write(requestid);
-        SendAttributes(session.Writer, Attributes.Dummy);   //TODO: Return attributes for path
+        SendStat(session, requestid, path, flags);
     }
 
     private static void FStatHandler(Session session, uint requestid)
     {
         var handle = session.Reader.ReadString();
-        var flags = session.Reader.ReadUInt32();
+        var flags = session.Reader.ReadFileAttributeFlags();
 
-        session.Logger.LogInformation("Handle: {handle}, Flags: {flags}", handle, Convert.ToString(flags, 2));
-
-
-        if (session.FileHandles.TryGetValue(handle, out var file))
+        if (session.FileHandles.TryGetValue(handle, out var path))
         {
-            try
-            {
-                var fileinfo = new FileInfo(file);
-
-                session.Logger.LogInformation("File found: {fullpath}, size: {size}", fileinfo.FullName, fileinfo.Length);
-
-                session.Writer.Write(ResponseType.ATTRS);
-                session.Writer.Write(requestid);
-                SendAttributes(
-                    session.Writer,
-                    new Attributes(fileinfo)
-                );
-            }
-            catch
-            {
-                SendStatus(session.Writer, requestid, Status.FAILURE);
-            }
+            SendStat(session, requestid, path, flags);
         }
         else
         {
-            SendStatus(session.Writer, requestid, Status.INVALID_HANDLE);
+            SendStatus(session, requestid, Status.INVALID_HANDLE);
+        }
+    }
+
+    private static void SetStatHandler(Session session, uint requestid)
+    {
+        var path = GetPath(session, session.Reader.ReadString());
+        var attrs = session.Reader.ReadAttributes();
+
+        DoStat(session, requestid, path, attrs);
+    }
+
+    private static void FSetStatHandler(Session session, uint requestid)
+    {
+        var handle = session.Reader.ReadString();
+        var attrs = session.Reader.ReadAttributes();
+
+        if (session.FileHandles.TryGetValue(handle, out var path))
+        {
+            DoStat(session, requestid, path, attrs);
+        }
+        else
+        {
+            SendStatus(session, requestid, Status.INVALID_HANDLE);
         }
     }
 
@@ -159,23 +162,31 @@ public class Server : IServer
         var path = session.Reader.ReadString();
 
         var handle = GetHandle();
-        session.FileHandles.Add(handle, GetPath(session.Root, path));
+        session.FileHandles.Add(handle, GetPath(session, path));
 
         session.Logger.LogInformation("Path: {path}, Handle: {handle}", path, handle);
 
-        SendHandle(session.Writer, requestid, handle);
+        SendHandle(session, requestid, handle);
     }
 
     private static void OpenHandler(Session session, uint requestid)
     {
         var filename = session.Reader.ReadString();
-        var flags = (AccessFlags)session.Reader.ReadUInt32();
-        var attrs = ReadAttributes(session.Reader);
+        var flags = session.Reader.ReadAccessFlags();
+        var attrs = session.Reader.ReadAttributes();
 
-        var handle = GetHandle();
-        session.FileHandles.Add(handle, GetPath(session.Root, filename));
-        session.FileStreams.Add(handle, File.OpenRead(GetPath(session.Root, filename)));
-        SendHandle(session.Writer, requestid, handle);
+        if (TryParsePFlags(flags, out var filemode, out var fileaccess))
+        {
+            var handle = GetHandle();
+            session.FileStreams.Add(handle, File.Open(GetPath(session, filename), filemode, fileaccess, FileShare.ReadWrite));
+            session.FileHandles.Add(handle, GetPath(session, filename));
+            SendHandle(session, requestid, handle);
+        }
+        else
+        {
+            SendStatus(session, requestid, Status.FAILURE);
+        }
+
 
         session.Logger.LogInformation("File: {filename}, Flags: {flags}, Attrs: {attrs}", filename, Convert.ToString((uint)flags, 2), attrs);
     }
@@ -186,7 +197,6 @@ public class Server : IServer
         var offset = session.Reader.ReadUInt64();
         var len = session.Reader.ReadUInt32();
 
-        session.Logger.LogInformation("Read {handle} from {offset}, {len} bytes", handle, offset, len);
         if (session.FileStreams.TryGetValue(handle, out var stream))
         {
             if (offset < (ulong)stream.Length)
@@ -197,16 +207,36 @@ public class Server : IServer
 
                 session.Writer.Write(ResponseType.DATA);
                 session.Writer.Write(requestid);
-                session.Writer.Write(buff.AsSpan().Slice(0, bytesread));
+                session.Writer.Write(bytesread);
+                session.Writer.Write(buff.AsSpan()[..bytesread]);
             }
             else
             {
-                SendStatus(session.Writer, requestid, Status.EOF);
+                SendStatus(session, requestid, Status.EOF);
             }
         }
         else
         {
-            SendStatus(session.Writer, requestid, Status.INVALID_HANDLE);
+            SendStatus(session, requestid, Status.INVALID_HANDLE);
+        }
+    }
+
+    private static void WriteHandler(Session session, uint requestid)
+    {
+        var handle = session.Reader.ReadString();
+        var offset = session.Reader.ReadUInt64();
+
+        session.Logger.LogInformation("Write {handle} from {offset}", handle, offset);
+        if (session.FileStreams.TryGetValue(handle, out var stream))
+        {
+            var data = session.Reader.ReadBinary();
+
+            stream.Seek((long)offset, SeekOrigin.Begin);
+            stream.Write(data, 0, data.Length);
+        }
+        else
+        {
+            SendStatus(session, requestid, Status.INVALID_HANDLE);
         }
     }
 
@@ -226,7 +256,7 @@ public class Server : IServer
 
             foreach (var file in allfiles)
             {
-                SendFSInfoWithAttributes(session.Writer, file);
+                SendFSInfoWithAttributes(session, file);
             }
             session.Writer.Write(true); // End of list
 
@@ -234,7 +264,7 @@ public class Server : IServer
         }
         else
         {
-            SendStatus(session.Writer, requestid, Status.EOF);
+            SendStatus(session, requestid, Status.EOF);
         }
     }
 
@@ -253,93 +283,112 @@ public class Server : IServer
         }
         session.FileStreams.Remove(handle);
 
-        SendStatus(session.Writer, requestId, Status.OK);
+        SendStatus(session, requestId, Status.OK);
     }
 
     private static void RemoveHandler(Session session, uint requestid)
     {
-        var filename = GetPath(session.Root, session.Reader.ReadString());
+        var filename = GetPath(session, session.Reader.ReadString());
 
         session.Logger.LogInformation("DELETE: {filename}", filename);
         try
         {
             File.Delete(filename);
-            SendStatus(session.Writer, requestid, Status.OK);
+            SendStatus(session, requestid, Status.OK);
         }
         catch
         {
-            SendStatus(session.Writer, requestid, Status.FAILURE);  // TODO: Return (more) correct status like NO_SUCH_FILE or PERMISSION_DENIED etc.
+            SendStatus(session, requestid, Status.FAILURE);  // TODO: Return (more) correct status like NO_SUCH_FILE or PERMISSION_DENIED etc.
         }
     }
 
     private static void RenameHandler(Session session, uint requestid)
     {
-        var oldfilename = GetPath(session.Root, session.Reader.ReadString());
-        var newfilename = GetPath(session.Root, session.Reader.ReadString());
+        var oldfilename = GetPath(session, session.Reader.ReadString());
+        var newfilename = GetPath(session, session.Reader.ReadString());
 
         session.Logger.LogInformation("RENAME: {oldfilename} -> {newfilename}", oldfilename, newfilename);
         try
         {
             File.Move(oldfilename, newfilename);
-            SendStatus(session.Writer, requestid, Status.OK);
+            SendStatus(session, requestid, Status.OK);
         }
         catch
         {
-            SendStatus(session.Writer, requestid, Status.FAILURE);  // TODO: Return (more) correct status like NO_SUCH_FILE or PERMISSION_DENIED etc.
+            SendStatus(session, requestid, Status.FAILURE);  // TODO: Return (more) correct status like NO_SUCH_FILE or PERMISSION_DENIED etc.
         }
     }
 
     private static void MakeDirHandler(Session session, uint requestid)
     {
-        var name = GetPath(session.Root, session.Reader.ReadString());
-        var attrs = ReadAttributes(session.Reader);
+        var name = GetPath(session, session.Reader.ReadString());
+        var attrs = session.Reader.ReadAttributes();
 
         session.Logger.LogInformation("MAKEDIR: {name} [{attributes}]", name, attrs);
         try
         {
             Directory.CreateDirectory(name);
-            SendStatus(session.Writer, requestid, Status.OK);
+            SendStatus(session, requestid, Status.OK);
         }
         catch
         {
-            SendStatus(session.Writer, requestid, Status.FAILURE);  // TODO: Return (more) correct status like NO_SUCH_FILE or PERMISSION_DENIED etc.
+            SendStatus(session, requestid, Status.FAILURE);  // TODO: Return (more) correct status like NO_SUCH_FILE or PERMISSION_DENIED etc.
         }
     }
 
     private static void RemoveDirHandler(Session session, uint requestid)
     {
-        var name = GetPath(session.Root, session.Reader.ReadString());
+        var name = GetPath(session, session.Reader.ReadString());
         session.Logger.LogInformation("REMOVEDIR: {name}", name);
         try
         {
             Directory.Delete(name);
-            SendStatus(session.Writer, requestid, Status.OK);
+            SendStatus(session, requestid, Status.OK);
         }
         catch
         {
-            SendStatus(session.Writer, requestid, Status.FAILURE);  // TODO: Return (more) correct status like NO_SUCH_FILE or PERMISSION_DENIED etc.
+            SendStatus(session, requestid, Status.FAILURE);  // TODO: Return (more) correct status like NO_SUCH_FILE or PERMISSION_DENIED etc.
         }
     }
 
 
-    private static void SendHandle(SshStreamWriter writer, uint requestId, string handle)
+    private static void SendHandle(Session session, uint requestId, string handle)
     {
-        writer.Write(ResponseType.HANDLE);
-        writer.Write(requestId);
-        writer.Write(handle);
-
+        session.Writer.Write(ResponseType.HANDLE);
+        session.Writer.Write(requestId);
+        session.Writer.Write(handle);
     }
 
-    private static void SendStatus(SshStreamWriter writer, uint requestId, Status status)
-        => SendStatus(writer, requestId, status, GetStatusString(status), string.Empty);
-
-    private static void SendStatus(SshStreamWriter writer, uint requestId, Status status, string errorMessage, string languageTag)
+    private static void DoStat(Session session, uint requestid, string path, Attributes attributes)
     {
-        writer.Write(ResponseType.STATUS);
-        writer.Write(requestId);
-        writer.Write(status);
-        writer.Write(errorMessage);
-        writer.Write(languageTag);
+        session.Logger.LogInformation("Stat: {path}, attributes: {flags}", path, attributes);
+        SendStatus(session, requestid, Status.OK);
+    }
+
+    private static void SendStat(Session session, uint requestid, string path, FileAttributeFlags flags)
+    {
+        try
+        {
+            session.Writer.Write(ResponseType.ATTRS);
+            session.Writer.Write(requestid);
+            session.Writer.Write(new Attributes(new FileInfo(path)), flags);
+        }
+        catch
+        {
+            SendStatus(session, requestid, Status.FAILURE);
+        }
+    }
+
+    private static void SendStatus(Session session, uint requestId, Status status)
+        => SendStatus(session, requestId, status, GetStatusString(status), string.Empty);
+
+    private static void SendStatus(Session session, uint requestId, Status status, string errorMessage, string languageTag)
+    {
+        session.Writer.Write(ResponseType.STATUS);
+        session.Writer.Write(requestId);
+        session.Writer.Write(status);
+        session.Writer.Write(errorMessage);
+        session.Writer.Write(languageTag);
     }
 
     private static string GetStatusString(Status status)
@@ -359,65 +408,54 @@ public class Server : IServer
 
     private static string GetHandle() => Guid.NewGuid().ToString("N");
 
-    private static void SendFSInfoWithAttributes(SshStreamWriter writer, FileSystemInfo fileInfo)
+    private static void SendFSInfoWithAttributes(Session session, FileSystemInfo fileInfo)
     {
-        writer.Write(fileInfo.Name);
-        SendAttributes(writer, new Attributes(fileInfo));
+        session.Writer.Write(fileInfo.Name);
+        session.Writer.Write(new Attributes(fileInfo));
     }
 
-    private static void SendAttributes(SshStreamWriter writer, Attributes attributes)
+    private static bool TryParsePFlags(AccessFlags pflags, out FileMode fileMode, out FileAccess fileAccess)
     {
-        var flags = FileAttributeFlags.SIZE
-            | FileAttributeFlags.OWNERGROUP
-            | FileAttributeFlags.PERMISSIONS
-            | FileAttributeFlags.ACCESSTIME
-            | FileAttributeFlags.CREATETIME
-            | FileAttributeFlags.MODIFYTIME;
-        writer.Write(flags);
-        writer.Write(attributes.FileType);
-        writer.Write(attributes.FileSize);
-        writer.Write(attributes.Uid);
-        writer.Write(attributes.Gid);
-        writer.Write(attributes.Permissions);
-        writer.Write(attributes.ATime.ToUnixTimeSeconds());
-        writer.Write(attributes.CTime.ToUnixTimeSeconds());
-        writer.Write(attributes.MTime.ToUnixTimeSeconds());
-        //writer.Write(0);  //extended type
-        //writer.Write(0);  //extended data
-    }
+        fileMode = FileMode.Open;
+        fileAccess = FileAccess.Read;
 
-    private static Attributes ReadAttributes(SshStreamReader reader)
-    {
-        var flags = (FileAttributeFlags)reader.ReadUInt32();
-        var type = (FileType)reader.ReadByte();
-        var size = flags.HasFlag(FileAttributeFlags.SIZE) ? reader.ReadUInt64() : 0;
-        var owner = flags.HasFlag(FileAttributeFlags.OWNERGROUP) ? reader.ReadString() : string.Empty;
-        var group = flags.HasFlag(FileAttributeFlags.OWNERGROUP) ? reader.ReadString() : string.Empty;
-        var permissions = flags.HasFlag(FileAttributeFlags.PERMISSIONS) ? (Permissions)reader.ReadUInt32() : Permissions.None;
-        var atime = (flags.HasFlag(FileAttributeFlags.ACCESSTIME)
-            ? DateTimeOffset.FromUnixTimeSeconds(reader.ReadInt64()) : DateTimeOffset.MinValue)
-            .AddMilliseconds((flags.HasFlag(FileAttributeFlags.SUBSECOND_TIMES) ? reader.ReadUInt32() : 0) * 10 ^ 6);
-        var ctime = (flags.HasFlag(FileAttributeFlags.CREATETIME)
-            ? DateTimeOffset.FromUnixTimeSeconds(reader.ReadInt64()) : DateTimeOffset.MinValue)
-            .AddMilliseconds((flags.HasFlag(FileAttributeFlags.SUBSECOND_TIMES) ? reader.ReadUInt32() : 0) * 10 ^ 6);
-        var mtime = (flags.HasFlag(FileAttributeFlags.MODIFYTIME)
-            ? DateTimeOffset.FromUnixTimeSeconds(reader.ReadInt64()) : DateTimeOffset.MinValue)
-            .AddMilliseconds((flags.HasFlag(FileAttributeFlags.SUBSECOND_TIMES) ? reader.ReadUInt32() : 0) * 10 ^ 6);
-        var acl = flags.HasFlag(FileAttributeFlags.ACL) ? reader.ReadString() : string.Empty;
-        var extended_count = flags.HasFlag(FileAttributeFlags.EXTENDED) ? reader.ReadUInt32() : 0;
-
-        if (extended_count > 0)
+        if (pflags.HasFlag(AccessFlags.READ) && pflags.HasFlag(AccessFlags.WRITE))
         {
-            throw new Exception("Extended attributes currently not supported");
+            fileAccess = FileAccess.ReadWrite;
+        }
+        else if (pflags.HasFlag(AccessFlags.READ))
+        {
+            fileAccess = FileAccess.Read;
+        }
+        else if (pflags.HasFlag(AccessFlags.WRITE))
+        {
+            fileAccess = FileAccess.Write;
         }
 
-        return new Attributes(type, size, owner, group, permissions, ctime, atime, mtime);
+        if (pflags.HasFlag(AccessFlags.APPEND))
+        {
+            fileMode = FileMode.Append;
+        }
+        else if (pflags.HasFlag(AccessFlags.CREATE))
+        {
+            fileMode = FileMode.OpenOrCreate;
+        }
+        else if (pflags.HasFlag(AccessFlags.TRUNCATE))
+        {
+            fileMode = FileMode.CreateNew;
+        }
+        else if (pflags.HasFlag(AccessFlags.EXCL))
+        {
+            throw new NotImplementedException();
+        }
+
+        return true;
     }
 
-    private static string GetPath(string root, string path)
+    private static string GetPath(Session session, string path)
     {
-        var result = Path.GetFullPath(Path.Combine(root, path.TrimStart('/'))).Replace('/', '\\');
-        return result.StartsWith(root) ? result : root;
+        var result = Path.GetFullPath(Path.Combine(session.Root, path.TrimStart('/'))).Replace('/', '\\');
+        return result.StartsWith(session.Root) ? result : session.Root;
     }
 }
 

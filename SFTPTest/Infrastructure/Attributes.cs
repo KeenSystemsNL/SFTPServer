@@ -2,7 +2,16 @@
 
 namespace SFTPTest.Infrastructure;
 
-internal record Attributes(FileType FileType, ulong FileSize, string Uid, string Gid, Permissions Permissions, DateTimeOffset CTime, DateTimeOffset ATime, DateTimeOffset MTime)
+public record Attributes(
+    FileType FileType,
+    ulong FileSize,
+    string Uid,
+    string Gid,
+    Permissions Permissions,
+    DateTimeOffset CreationTime,
+    DateTimeOffset LastAccessedTime,
+    DateTimeOffset LastModifiedTime,
+    ACL[] ACLs)
 {
     private static readonly string _owner = "Nobody";
     private static readonly string _group = _owner;
@@ -13,8 +22,8 @@ internal record Attributes(FileType FileType, ulong FileSize, string Uid, string
         | Permissions.Group_Write
         | Permissions.Other_Execute;
 
-    public static Attributes Dummy = new(FileType.UNKNOWN, 0, _owner, _group, _defaultpermissions, DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch);
-    public Attributes(FileSystemInfo fsInfo) : this(GetFileType(fsInfo), GetLength(fsInfo), _owner, _group, _defaultpermissions, fsInfo.CreationTimeUtc, fsInfo.LastAccessTimeUtc, fsInfo.LastWriteTimeUtc) { }
+    public static Attributes Dummy = new(FileType.UNKNOWN, 0, _owner, _group, _defaultpermissions, DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch, Array.Empty<ACL>());
+    public Attributes(FileSystemInfo fsInfo) : this(GetFileType(fsInfo), GetLength(fsInfo), _owner, _group, _defaultpermissions, fsInfo.CreationTimeUtc, fsInfo.LastAccessTimeUtc, fsInfo.LastWriteTimeUtc, Array.Empty<ACL>()) { }
 
     private static FileType GetFileType(FileSystemInfo fsInfo)
         => fsInfo switch

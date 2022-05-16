@@ -11,5 +11,13 @@ public enum FileAttributeFlags : uint
     ACL = 0x00000040,
     OWNERGROUP = 0x00000080,
     SUBSECOND_TIMES = 0x00000100,
-    EXTENDED = 0x80000000
+    EXTENDED = 0x80000000,
+
+    DEFAULT = SIZE
+           | OWNERGROUP
+           | PERMISSIONS
+           | ACCESSTIME
+           | CREATETIME
+           | MODIFYTIME
+           | ACL
 }

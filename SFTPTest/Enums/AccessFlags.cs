@@ -3,11 +3,11 @@
 [Flags]
 public enum AccessFlags : uint
 {
-    READ = 0x00000001,
-    WRITE = 0x00000002,
-    APPEND = 0x00000004,
-    CREAT = 0x00000008,
-    TRUNC = 0x00000010,
-    EXCL = 0x00000020,
-    TEXT = 0x00000040
+    READ = 0x01,
+    WRITE = 0x02,
+    APPEND = 0x04,
+    CREATE = 0x08,
+    TRUNCATE = 0x10,
+    EXCL = 0x20,
+    TEXT = 0x40
 }
