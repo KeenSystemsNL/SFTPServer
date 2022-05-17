@@ -99,9 +99,8 @@ public class Server : IServer
         {
             path = "/";
         }
-        path = GetPath(session, path);
 
-        session.Logger.LogInformation("Path: {path}", path);
+        session.Logger.LogInformation("Path: {path}", GetPath(session, path));
         await session.Writer.Write(ResponseType.NAME, cancellationToken).ConfigureAwait(false);
         await session.Writer.Write(requestid, cancellationToken).ConfigureAwait(false);
         await session.Writer.Write(new[] { new VirtualPath(path) }, cancellationToken).ConfigureAwait(false);
@@ -112,7 +111,7 @@ public class Server : IServer
 
     private static async Task LStatHandler(Session session, uint requestid, CancellationToken cancellationToken = default)
     {
-        var path = await session.Reader.ReadString(cancellationToken).ConfigureAwait(false);
+        var path = GetPath(session, await session.Reader.ReadString(cancellationToken).ConfigureAwait(false));
         var flags = await session.Reader.ReadFileAttributeFlags(cancellationToken).ConfigureAwait(false);
 
         await SendStat(session, requestid, path, flags, cancellationToken).ConfigureAwait(false);
@@ -160,10 +159,10 @@ public class Server : IServer
 
     private static async Task OpenDirHandler(Session session, uint requestid, CancellationToken cancellationToken = default)
     {
-        var path = await session.Reader.ReadString(cancellationToken).ConfigureAwait(false);
+        var path = GetPath(session, await session.Reader.ReadString(cancellationToken).ConfigureAwait(false));
 
         var handle = GetHandle();
-        session.FileHandles.Add(handle, GetPath(session, path));
+        session.FileHandles.Add(handle, path);
 
         session.Logger.LogInformation("Path: {path}, Handle: {handle}", path, handle);
         await SendHandle(session, requestid, handle, cancellationToken).ConfigureAwait(false);
@@ -416,5 +415,20 @@ public class Server : IServer
     {
         var result = Path.GetFullPath(Path.Combine(session.Root, path.TrimStart('/'))).Replace('/', '\\');
         return result.StartsWith(session.Root) ? result : session.Root;
+    }
+
+    private static Attributes GetAttributes(string path)
+    {
+        if (Directory.Exists(path))
+        {
+            return new Attributes(new DirectoryInfo(path));
+        }
+
+        if (File.Exists(path))
+        {
+            return new Attributes(new FileInfo(path));
+        }
+
+        throw new Exception($"Path {path} not found");
     }
 }
