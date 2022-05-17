@@ -84,6 +84,8 @@ public class Server : IServer
         // Get client version
         var clientversion = await reader.ReadUInt32(cancellationToken).ConfigureAwait(false);
 
+        _logger.LogInformation("CLIENT version {clientversion}", clientversion);
+
         var version = Math.Min(clientversion, 4);
 
         // Send version response
@@ -366,14 +368,7 @@ public class Server : IServer
         {
             await session.Writer.Write(ResponseType.ATTRS, cancellationToken).ConfigureAwait(false);
             await session.Writer.Write(requestid, cancellationToken).ConfigureAwait(false);
-            if (Directory.Exists(path))
-            {
-                await session.Writer.Write(new Attributes(new DirectoryInfo(path)), flags, cancellationToken).ConfigureAwait(false);
-            }
-            else
-            {
-                await session.Writer.Write(new Attributes(new FileInfo(path)), flags, cancellationToken).ConfigureAwait(false);
-            }
+            await session.Writer.Write(GetAttributes(path), flags, cancellationToken).ConfigureAwait(false);
         }
         catch
         {

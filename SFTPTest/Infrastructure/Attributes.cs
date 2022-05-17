@@ -22,7 +22,6 @@ public record Attributes(
         | Permissions.Group_Write
         | Permissions.Other_Execute;
 
-    public static readonly Attributes Dummy = new(FileType.UNKNOWN, 0, _owner, _group, _defaultpermissions, DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch, Array.Empty<ACL>());
     public Attributes(FileSystemInfo fsInfo) : this(GetFileType(fsInfo), GetLength(fsInfo), _owner, _group, _defaultpermissions, fsInfo.CreationTimeUtc, fsInfo.LastAccessTimeUtc, fsInfo.LastWriteTimeUtc, Array.Empty<ACL>()) { }
 
     private static FileType GetFileType(FileSystemInfo fsInfo)
