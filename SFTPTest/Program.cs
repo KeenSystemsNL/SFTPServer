@@ -10,7 +10,7 @@ public class Program
 {
     private static ILogger<Program>? _logger;
 
-    public static void Main(string[] args)
+    public static async Task Main(string[] args)
     {
         var configurationbuilder = new ConfigurationBuilder()
             .SetBasePath(Path.GetDirectoryName(Assembly.GetEntryAssembly()!.Location))
@@ -32,12 +32,13 @@ public class Program
         };
 
         var server = serviceprovider.GetRequiredService<IServer>();
+        using var cts = new CancellationTokenSource();
         using var stdin = Console.OpenStandardInput();
         using var stdout = Console.OpenStandardOutput();
 
         _logger.LogInformation("Starting server...");
 
-        server.Run(stdin, stdout);
+        await server.Run(stdin, stdout, cts.Token).ConfigureAwait(false);
         _logger.LogInformation("Server stopped...");
     }
 }

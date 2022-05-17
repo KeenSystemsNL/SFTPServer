@@ -12,54 +12,55 @@ public class SshStreamReader
     public SshStreamReader(Stream stream)
         => _stream = stream ?? throw new ArgumentNullException(nameof(stream));
 
-    public bool ReadBoolean()
-        => ReadByte() != 0;
+    public async Task<bool> ReadBoolean(CancellationToken cancellationToken = default)
+        => await ReadByte(cancellationToken).ConfigureAwait(false) != 0;
 
-    public byte ReadByte()
-        => ReadBinary(1)[0];
+    public async Task<byte> ReadByte(CancellationToken cancellationToken = default)
+        => (await ReadBinary(1, cancellationToken).ConfigureAwait(false))[0];
 
-    public uint ReadUInt32()
-        => BinaryPrimitives.ReadUInt32BigEndian(ReadBinary(4));
+    public async Task<uint> ReadUInt32(CancellationToken cancellationToken = default)
+        => BinaryPrimitives.ReadUInt32BigEndian(await ReadBinary(4, cancellationToken).ConfigureAwait(false));
 
-    public ulong ReadUInt64()
-        => BinaryPrimitives.ReadUInt64BigEndian(ReadBinary(8));
-    public long ReadInt64()
-        => BinaryPrimitives.ReadInt64BigEndian(ReadBinary(8));
+    public async Task<ulong> ReadUInt64(CancellationToken cancellationToken = default)
+        => BinaryPrimitives.ReadUInt64BigEndian(await ReadBinary(8, cancellationToken).ConfigureAwait(false));
 
-    public string ReadString(int length)
-        => _encoding.GetString(ReadBinary(length));
+    public async Task<long> ReadInt64(CancellationToken cancellationToken = default)
+        => BinaryPrimitives.ReadInt64BigEndian(await ReadBinary(8, cancellationToken).ConfigureAwait(false));
 
-    public string ReadString()
-        => _encoding.GetString(ReadBinary());
+    public async Task<string> ReadString(int length, CancellationToken cancellationToken = default)
+        => _encoding.GetString(await ReadBinary(length, cancellationToken).ConfigureAwait(false));
 
-    public AccessFlags ReadAccessFlags()
-        => (AccessFlags)ReadUInt32();
+    public async Task<string> ReadString(CancellationToken cancellationToken = default)
+        => _encoding.GetString(await ReadBinary(cancellationToken).ConfigureAwait(false));
 
-    public FileAttributeFlags ReadFileAttributeFlags()
-        => (FileAttributeFlags)ReadUInt32();
+    public async Task<AccessFlags> ReadAccessFlags(CancellationToken cancellationToken = default)
+        => (AccessFlags)await ReadUInt32(cancellationToken).ConfigureAwait(false);
 
-    public DateTimeOffset ReadTime(bool subseconds)
+    public async Task<FileAttributeFlags> ReadFileAttributeFlags(CancellationToken cancellationToken = default)
+        => (FileAttributeFlags)await ReadUInt32(cancellationToken).ConfigureAwait(false);
+
+    public async Task<DateTimeOffset> ReadTime(bool subseconds, CancellationToken cancellationToken = default)
     {
-        var seconds = ReadInt64();
+        var seconds = await ReadInt64(cancellationToken).ConfigureAwait(false);
         return seconds > 0
             ? DateTimeOffset.FromUnixTimeSeconds(seconds)
-                .AddMilliseconds((subseconds ? ReadUInt32() : 0) * 10 ^ 6)
+                .AddMilliseconds((subseconds ? await ReadUInt32(cancellationToken).ConfigureAwait(false) : 0) * 10 ^ 6)
             : DateTimeOffset.MinValue;
     }
 
-    public Attributes ReadAttributes()
+    public async Task<Attributes> ReadAttributes(CancellationToken cancellationToken = default)
     {
-        var flags = (FileAttributeFlags)ReadUInt32();
-        var type = (FileType)ReadByte();
-        var size = flags.HasFlag(FileAttributeFlags.SIZE) ? ReadUInt64() : 0;
-        var owner = flags.HasFlag(FileAttributeFlags.OWNERGROUP) ? ReadString() : string.Empty;
-        var group = flags.HasFlag(FileAttributeFlags.OWNERGROUP) ? ReadString() : string.Empty;
-        var permissions = flags.HasFlag(FileAttributeFlags.PERMISSIONS) ? (Permissions)ReadUInt32() : Permissions.None;
-        var atime = flags.HasFlag(FileAttributeFlags.ACCESSTIME) ? ReadTime(flags.HasFlag(FileAttributeFlags.SUBSECOND_TIMES)) : DateTimeOffset.MinValue;
-        var ctime = flags.HasFlag(FileAttributeFlags.CREATETIME) ? ReadTime(flags.HasFlag(FileAttributeFlags.SUBSECOND_TIMES)) : DateTimeOffset.MinValue;
-        var mtime = flags.HasFlag(FileAttributeFlags.MODIFYTIME) ? ReadTime(flags.HasFlag(FileAttributeFlags.SUBSECOND_TIMES)) : DateTimeOffset.MinValue;
-        var acls = flags.HasFlag(FileAttributeFlags.ACL) ? ReadACLs() : Array.Empty<ACL>();
-        var extended_count = flags.HasFlag(FileAttributeFlags.EXTENDED) ? ReadUInt32() : 0;
+        var flags = (FileAttributeFlags)await ReadUInt32(cancellationToken).ConfigureAwait(false);
+        var type = (FileType)await ReadByte(cancellationToken).ConfigureAwait(false);
+        var size = flags.HasFlag(FileAttributeFlags.SIZE) ? await ReadUInt64(cancellationToken).ConfigureAwait(false) : 0;
+        var owner = flags.HasFlag(FileAttributeFlags.OWNERGROUP) ? await ReadString(cancellationToken).ConfigureAwait(false) : string.Empty;
+        var group = flags.HasFlag(FileAttributeFlags.OWNERGROUP) ? await ReadString(cancellationToken).ConfigureAwait(false) : string.Empty;
+        var permissions = flags.HasFlag(FileAttributeFlags.PERMISSIONS) ? (Permissions)await ReadUInt32(cancellationToken).ConfigureAwait(false) : Permissions.None;
+        var atime = flags.HasFlag(FileAttributeFlags.ACCESSTIME) ? await ReadTime(flags.HasFlag(FileAttributeFlags.SUBSECOND_TIMES), cancellationToken).ConfigureAwait(false) : DateTimeOffset.MinValue;
+        var ctime = flags.HasFlag(FileAttributeFlags.CREATETIME) ? await ReadTime(flags.HasFlag(FileAttributeFlags.SUBSECOND_TIMES), cancellationToken).ConfigureAwait(false) : DateTimeOffset.MinValue;
+        var mtime = flags.HasFlag(FileAttributeFlags.MODIFYTIME) ? await ReadTime(flags.HasFlag(FileAttributeFlags.SUBSECOND_TIMES), cancellationToken).ConfigureAwait(false) : DateTimeOffset.MinValue;
+        var acls = flags.HasFlag(FileAttributeFlags.ACL) ? await ReadACLs(cancellationToken).ConfigureAwait(false) : Array.Empty<ACL>();
+        var extended_count = flags.HasFlag(FileAttributeFlags.EXTENDED) ? await ReadUInt32(cancellationToken).ConfigureAwait(false) : 0;
 
         if (extended_count > 0)
         {
@@ -69,31 +70,31 @@ public class SshStreamReader
         return new Attributes(type, size, owner, group, permissions, ctime, atime, mtime, acls);
     }
 
-    public ACL[] ReadACLs()
+    public async Task<ACL[]> ReadACLs(CancellationToken cancellationToken = default)
     {
-        var acecount = ReadUInt32();
+        var acecount = await ReadUInt32(cancellationToken).ConfigureAwait(false);
         var acls = new ACL[(int)acecount];
         for (var i = 0; i < acecount; i++)
         {
             acls[i] = new ACL(
-                (ACEType)ReadUInt32(),
-                (ACEFlags)ReadUInt32(),
-                (ACEMask)ReadUInt32(),
-                ReadString()
+                (ACEType)await ReadUInt32(cancellationToken).ConfigureAwait(false),
+                (ACEFlags)await ReadUInt32(cancellationToken).ConfigureAwait(false),
+                (ACEMask)await ReadUInt32(cancellationToken).ConfigureAwait(false),
+                await ReadString(cancellationToken).ConfigureAwait(false)
             );
         }
         return acls;
     }
 
-    public byte[] ReadBinary()
-        => ReadBinary((int)ReadUInt32());
+    public async Task<byte[]> ReadBinary(CancellationToken cancellationToken = default)
+        => await ReadBinary((int)await ReadUInt32(cancellationToken).ConfigureAwait(false), cancellationToken).ConfigureAwait(false);
 
 
-    private byte[] ReadBinary(int length)
+    private async Task<byte[]> ReadBinary(int length, CancellationToken cancellationToken = default)
     {
-        var data = new byte[length];
-        _stream.Read(data, 0, length);
+        var buffer = new byte[length];
+        await _stream.ReadAsync(buffer.AsMemory(0, length), cancellationToken).ConfigureAwait(false);
 
-        return data;
+        return buffer;
     }
 }

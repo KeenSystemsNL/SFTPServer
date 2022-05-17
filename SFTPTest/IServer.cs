@@ -3,5 +3,5 @@ namespace SFTPTest;
 
 public interface IServer
 {
-    void Run(Stream @in, Stream @out);
+    Task Run(Stream @in, Stream @out, CancellationToken cancellationToken = default);
 }

@@ -1,5 +1,4 @@
-﻿using Microsoft.Extensions.Logging;
-using SFTPTest.Enums;
+﻿using SFTPTest.Enums;
 using System.Buffers.Binary;
 using System.Text;
 
@@ -17,163 +16,160 @@ public class SshStreamWriter
         _memorystream = new MemoryStream(bufferSize);
     }
 
-    public void Write(RequestType requestType)
-        => Write((byte)requestType);
+    public Task Write(RequestType requestType, CancellationToken cancellationToken = default)
+        => Write((byte)requestType, cancellationToken);
 
-    public void Write(ResponseType responseType)
-        => Write((byte)responseType);
+    public Task Write(ResponseType responseType, CancellationToken cancellationToken = default)
+        => Write((byte)responseType, cancellationToken);
 
-    public void Write(FileAttributeFlags fileAttributeFlags)
-        => Write((uint)fileAttributeFlags);
+    public Task Write(FileAttributeFlags fileAttributeFlags, CancellationToken cancellationToken = default)
+        => Write((uint)fileAttributeFlags, cancellationToken);
 
-    public void Write(Permissions permissions)
-        => Write((uint)permissions);
+    public Task Write(Permissions permissions, CancellationToken cancellationToken = default)
+        => Write((uint)permissions, cancellationToken);
 
-    public void Write(ACEType aceType)
-        => Write((uint)aceType);
+    public Task Write(ACEType aceType, CancellationToken cancellationToken = default)
+        => Write((uint)aceType, cancellationToken);
 
-    public void Write(ACEFlags aceFlags)
-    => Write((uint)aceFlags);
+    public Task Write(ACEFlags aceFlags, CancellationToken cancellationToken = default)
+        => Write((uint)aceFlags, cancellationToken);
 
-    public void Write(ACEMask aceMask)
-    => Write((uint)aceMask);
+    public Task Write(ACEMask aceMask, CancellationToken cancellationToken = default)
+        => Write((uint)aceMask, cancellationToken);
 
-    public void Write(FileType fileType)
-        => Write((byte)fileType);
+    public Task Write(FileType fileType, CancellationToken cancellationToken = default)
+        => Write((byte)fileType, cancellationToken);
 
-    public void Write(Status status)
-        => Write((uint)status);
+    public Task Write(Status status, CancellationToken cancellationToken = default)
+        => Write((uint)status, cancellationToken);
 
-    public void Write(IReadOnlyCollection<FileSystemInfo> fileSystemInfos)
+    public async Task Write(IReadOnlyCollection<FileSystemInfo> fileSystemInfos, CancellationToken cancellationToken = default)
     {
-        Write(fileSystemInfos.Count);
+        await Write(fileSystemInfos.Count, cancellationToken).ConfigureAwait(false);
 
         foreach (var file in fileSystemInfos)
         {
-            Write(file);
+            await Write(file, cancellationToken).ConfigureAwait(false);
         }
     }
 
-    public void Write(Attributes attributes, FileAttributeFlags flags = FileAttributeFlags.DEFAULT)
+    public async Task Write(Attributes attributes, FileAttributeFlags flags = FileAttributeFlags.DEFAULT, CancellationToken cancellationToken = default)
     {
-        Write(flags);
-        Write(attributes.FileType);
+        await Write(flags, cancellationToken).ConfigureAwait(false);
+        await Write(attributes.FileType, cancellationToken).ConfigureAwait(false);
         if (flags.HasFlag(FileAttributeFlags.SIZE))
         {
-            Write(attributes.FileSize);
+            await Write(attributes.FileSize, cancellationToken).ConfigureAwait(false);
         }
 
         if (flags.HasFlag(FileAttributeFlags.OWNERGROUP))
         {
-            Write(attributes.Uid);
-            Write(attributes.Gid);
+            await Write(attributes.Uid, cancellationToken).ConfigureAwait(false);
+            await Write(attributes.Gid, cancellationToken).ConfigureAwait(false);
         }
         if (flags.HasFlag(FileAttributeFlags.PERMISSIONS))
         {
-            Write(attributes.Permissions);
+            await Write(attributes.Permissions, cancellationToken).ConfigureAwait(false);
         }
 
         if (flags.HasFlag(FileAttributeFlags.ACCESSTIME))
         {
-            Write(attributes.LastAccessedTime, flags.HasFlag(FileAttributeFlags.SUBSECOND_TIMES));
+            await Write(attributes.LastAccessedTime, flags.HasFlag(FileAttributeFlags.SUBSECOND_TIMES), cancellationToken).ConfigureAwait(false);
         }
 
         if (flags.HasFlag(FileAttributeFlags.CREATETIME))
         {
-            Write(attributes.CreationTime, flags.HasFlag(FileAttributeFlags.SUBSECOND_TIMES));
+            await Write(attributes.CreationTime, flags.HasFlag(FileAttributeFlags.SUBSECOND_TIMES), cancellationToken).ConfigureAwait(false);
         }
 
         if (flags.HasFlag(FileAttributeFlags.MODIFYTIME))
         {
-            Write(attributes.LastModifiedTime, flags.HasFlag(FileAttributeFlags.SUBSECOND_TIMES));
+            await Write(attributes.LastModifiedTime, flags.HasFlag(FileAttributeFlags.SUBSECOND_TIMES), cancellationToken).ConfigureAwait(false);
         }
 
         if (flags.HasFlag(FileAttributeFlags.ACL))
         {
-            Write(attributes.ACLs);
+            await Write(attributes.ACLs, cancellationToken).ConfigureAwait(false);
         }
         //Write(0);  //extended type
         //Write(0);  //extended data
     }
 
-    public void Write(DateTimeOffset dateTime, bool subseconds)
+    public async Task Write(DateTimeOffset dateTime, bool subseconds, CancellationToken cancellationToken = default)
     {
-        Write(dateTime.ToUnixTimeSeconds());
+        await Write(dateTime.ToUnixTimeSeconds(), cancellationToken).ConfigureAwait(false);
         if (subseconds)
         {
-            Write(dateTime.Millisecond * 10 ^ 6);
+            await Write(dateTime.Millisecond * 10 ^ 6, cancellationToken).ConfigureAwait(false);
         }
     }
 
-    public void Write(ACL[] acls)
+    public async Task Write(ACL[] acls, CancellationToken cancellationToken = default)
     {
-        Write(acls.Length);
+        await Write(acls.Length, cancellationToken).ConfigureAwait(false);
         foreach (var acl in acls)
         {
-            Write(acl.ACEType);
-            Write(acl.ACEFlags);
-            Write(acl.ACEMask);
-            Write(acl.Who);
+            await Write(acl.ACEType, cancellationToken).ConfigureAwait(false);
+            await Write(acl.ACEFlags, cancellationToken).ConfigureAwait(false);
+            await Write(acl.ACEMask, cancellationToken).ConfigureAwait(false);
+            await Write(acl.Who, cancellationToken).ConfigureAwait(false);
         }
     }
 
-    public void Write(FileSystemInfo fileInfo)
+    public async Task Write(FileSystemInfo fileInfo, CancellationToken cancellationToken = default)
     {
-        Write(fileInfo.Name);
-        Write(new Attributes(fileInfo));
+        await Write(fileInfo.Name, cancellationToken).ConfigureAwait(false);
+        await Write(new Attributes(fileInfo), FileAttributeFlags.DEFAULT, cancellationToken).ConfigureAwait(false);
     }
 
-    public void Write(bool value)
-        => _memorystream.WriteByte(value ? (byte)1 : (byte)0);
+    public Task Write(bool value, CancellationToken cancellationToken = default)
+        => Write(value ? (byte)1 : (byte)0, cancellationToken);
 
-    public void Write(byte value)
-        => _memorystream.WriteByte(value);
+    public Task Write(byte value, CancellationToken cancellationToken = default)
+        => Write(new[] { value }, cancellationToken);
 
-    public void Write(int value)
-        => Write((uint)value);
+    public Task Write(int value, CancellationToken cancellationToken = default)
+        => Write((uint)value, cancellationToken);
 
-    public void Write(long value)
-        => Write((ulong)value);
+    public Task Write(long value, CancellationToken cancellationToken = default)
+        => Write((ulong)value, cancellationToken);
 
-    public void Write(uint value)
+    public Task Write(uint value, CancellationToken cancellationToken = default)
     {
         var bytes = new byte[4];
         BinaryPrimitives.WriteUInt32BigEndian(bytes, value);
-        _memorystream.Write(bytes, 0, 4);
+        return _memorystream.WriteAsync(bytes, 0, 4, cancellationToken);
     }
 
-    public void Write(ulong value)
+    public Task Write(ulong value, CancellationToken cancellationToken = default)
     {
         var bytes = new byte[8];
         BinaryPrimitives.WriteUInt64BigEndian(bytes, value);
-        _memorystream.Write(bytes, 0, 8);
+        return _memorystream.WriteAsync(bytes, 0, 8, cancellationToken);
     }
 
-    public void Write(string str)
+    public async Task Write(string str, CancellationToken cancellationToken = default)
     {
         if (str is null)
         {
             throw new ArgumentNullException(nameof(str));
         }
-        Write((uint)str.Length);
-        Write(_encoding.GetBytes(str));
+        await Write((uint)str.Length, cancellationToken).ConfigureAwait(false);
+        await Write(_encoding.GetBytes(str), cancellationToken).ConfigureAwait(false);
     }
 
-    public void Write(ReadOnlySpan<byte> data)
-        => _memorystream.Write(data);
+    public Task Write(byte[] data, CancellationToken cancellationToken = default)
+        => _memorystream.WriteAsync(data, 0, data.Length, cancellationToken);
 
-    public void Flush(ILogger logger)
+    public async Task Flush(CancellationToken cancellationToken = default)
     {
         var data = _memorystream.ToArray();
-
-        logger.LogInformation("Writing [{length}]: {data}", data.Length, Dumper.Dump(data));
-        logger.LogInformation("Writing [{length}]: {data}", data.Length, Dumper.DumpASCII(data));
 
         var len = new byte[4];
         BinaryPrimitives.WriteUInt32BigEndian(len, (uint)data.Length);
 
-        _stream.Write(len, 0, len.Length);
-        _stream.Write(data, 0, data.Length);
+        await _stream.WriteAsync(len, cancellationToken).ConfigureAwait(false);
+        await _stream.WriteAsync(data, cancellationToken).ConfigureAwait(false);
 
         _memorystream.Position = 0;
         _memorystream.SetLength(0);
