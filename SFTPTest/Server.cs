@@ -73,7 +73,7 @@ public class Server : IServer
                 }
 
                 // Write response
-                await writer.Flush(cancellationToken).ConfigureAwait(false);
+                await writer.Flush(_logger, cancellationToken).ConfigureAwait(false);
             }
         } while (!cancellationToken.IsCancellationRequested && msglength > 0);
         _logger.LogInformation("Cancel: {cancel}, EOF: {eof}", cancellationToken.IsCancellationRequested, msglength > 0);
@@ -99,6 +99,7 @@ public class Server : IServer
         {
             path = "/";
         }
+        path = GetPath(session, path);
 
         session.Logger.LogInformation("Path: {path}", path);
         await session.Writer.Write(ResponseType.NAME, cancellationToken).ConfigureAwait(false);
@@ -366,7 +367,14 @@ public class Server : IServer
         {
             await session.Writer.Write(ResponseType.ATTRS, cancellationToken).ConfigureAwait(false);
             await session.Writer.Write(requestid, cancellationToken).ConfigureAwait(false);
-            await session.Writer.Write(new Attributes(new FileInfo(path)), flags, cancellationToken).ConfigureAwait(false);
+            if (Directory.Exists(path))
+            {
+                await session.Writer.Write(new Attributes(new DirectoryInfo(path)), flags, cancellationToken).ConfigureAwait(false);
+            }
+            else
+            {
+                await session.Writer.Write(new Attributes(new FileInfo(path)), flags, cancellationToken).ConfigureAwait(false);
+            }
         }
         catch
         {
