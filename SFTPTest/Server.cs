@@ -60,7 +60,7 @@ public class Server : IServer
                 {
                     // Get requestid
                     var requestid = await reader.ReadUInt32(cancellationToken).ConfigureAwait(false);
-                    _logger.LogInformation("{msgtype}", msgtype);
+                    _logger.LogInformation("=== {msgtype} [{msglength}] ===", msgtype, msglength);
 
                     // Get handler and handle the message when supported
                     if (_messagehandlers.TryGetValue(msgtype, out var handler))
