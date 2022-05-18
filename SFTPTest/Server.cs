@@ -83,10 +83,10 @@ public class Server : IServer
     {
         // Get client version
         var clientversion = await reader.ReadUInt32(cancellationToken).ConfigureAwait(false);
+        var version = Math.Min(clientversion, 3);
 
-        _logger.LogInformation("CLIENT version {clientversion}", clientversion);
+        _logger.LogInformation("CLIENT version {clientversion}, sending version {serverversion}", clientversion, version);
 
-        var version = Math.Min(clientversion, 4);
 
         // Send version response
         await writer.Write(RequestType.VERSION, cancellationToken).ConfigureAwait(false);
@@ -114,25 +114,27 @@ public class Server : IServer
     private static async Task LStatHandler(Session session, uint requestid, CancellationToken cancellationToken = default)
     {
         var path = GetPath(session, await session.Reader.ReadString(cancellationToken).ConfigureAwait(false));
-        var flags = await session.Reader.ReadFileAttributeFlags(cancellationToken).ConfigureAwait(false);
 
-        await SendStat(session, requestid, path, flags, cancellationToken).ConfigureAwait(false);
+        session.Logger.LogInformation("Sending STAT");
+        await SendStat(session, requestid, path, cancellationToken).ConfigureAwait(false);
     }
 
     private static async Task FStatHandler(Session session, uint requestid, CancellationToken cancellationToken = default)
     {
         var handle = await session.Reader.ReadString(cancellationToken).ConfigureAwait(false);
-        var flags = await session.Reader.ReadFileAttributeFlags(cancellationToken).ConfigureAwait(false);
 
         if (session.FileHandles.TryGetValue(handle, out var path))
         {
-            await SendStat(session, requestid, path, flags, cancellationToken).ConfigureAwait(false);
+            await SendStat(session, requestid, path, cancellationToken).ConfigureAwait(false);
         }
         else
         {
-            await SendStatus(session, requestid, Status.INVALID_HANDLE, cancellationToken).ConfigureAwait(false);
+            await SendInvalidHandle(session, requestid, cancellationToken).ConfigureAwait(false);
         }
     }
+
+    private static Task SendInvalidHandle(Session session, uint requestid, CancellationToken cancellationToken = default)
+        => SendStatus(session, requestid, Status.NO_SUCH_FILE, cancellationToken);
 
     private static async Task SetStatHandler(Session session, uint requestid, CancellationToken cancellationToken = default)
     {
@@ -155,7 +157,7 @@ public class Server : IServer
         }
         else
         {
-            await SendStatus(session, requestid, Status.INVALID_HANDLE, cancellationToken).ConfigureAwait(false);
+            await SendInvalidHandle(session, requestid, cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -210,7 +212,7 @@ public class Server : IServer
         }
         else
         {
-            await SendStatus(session, requestid, Status.INVALID_HANDLE, cancellationToken).ConfigureAwait(false);
+            await SendInvalidHandle(session, requestid, cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -232,7 +234,7 @@ public class Server : IServer
         }
         else
         {
-            await SendStatus(session, requestid, Status.INVALID_HANDLE, cancellationToken).ConfigureAwait(false);
+            await SendInvalidHandle(session, requestid, cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -362,18 +364,19 @@ public class Server : IServer
         await session.Writer.Write(handle, cancellationToken).ConfigureAwait(false);
     }
 
-    private static async Task SendStat(Session session, uint requestid, string path, FileAttributeFlags flags, CancellationToken cancellationToken = default)
+    private static async Task SendStat(Session session, uint requestid, string path, CancellationToken cancellationToken = default)
     {
         try
         {
             await session.Writer.Write(ResponseType.ATTRS, cancellationToken).ConfigureAwait(false);
             await session.Writer.Write(requestid, cancellationToken).ConfigureAwait(false);
-            await session.Writer.Write(GetAttributes(path), flags, cancellationToken).ConfigureAwait(false);
+            await session.Writer.Write(GetAttributes(path), FileAttributeFlags.DEFAULT, cancellationToken).ConfigureAwait(false);
         }
         catch
         {
             await SendStatus(session, requestid, Status.FAILURE, cancellationToken).ConfigureAwait(false);
         }
+        session.Logger.LogInformation("STAT sent");
     }
 
     private static Task SendStatus(Session session, uint requestId, Status status, CancellationToken cancellationToken = default)

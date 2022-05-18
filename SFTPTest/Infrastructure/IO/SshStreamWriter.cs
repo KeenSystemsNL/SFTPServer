@@ -29,18 +29,6 @@ public class SshStreamWriter
     public Task Write(Permissions permissions, CancellationToken cancellationToken = default)
         => Write((uint)permissions, cancellationToken);
 
-    public Task Write(ACEType aceType, CancellationToken cancellationToken = default)
-        => Write((uint)aceType, cancellationToken);
-
-    public Task Write(ACEFlags aceFlags, CancellationToken cancellationToken = default)
-        => Write((uint)aceFlags, cancellationToken);
-
-    public Task Write(ACEMask aceMask, CancellationToken cancellationToken = default)
-        => Write((uint)aceMask, cancellationToken);
-
-    public Task Write(FileType fileType, CancellationToken cancellationToken = default)
-        => Write((byte)fileType, cancellationToken);
-
     public Task Write(Status status, CancellationToken cancellationToken = default)
         => Write((uint)status, cancellationToken);
 
@@ -57,13 +45,12 @@ public class SshStreamWriter
     public async Task Write(Attributes attributes, FileAttributeFlags flags = FileAttributeFlags.DEFAULT, CancellationToken cancellationToken = default)
     {
         await Write(flags, cancellationToken).ConfigureAwait(false);
-        await Write(attributes.FileType, cancellationToken).ConfigureAwait(false);
         if (flags.HasFlag(FileAttributeFlags.SIZE))
         {
             await Write(attributes.FileSize, cancellationToken).ConfigureAwait(false);
         }
 
-        if (flags.HasFlag(FileAttributeFlags.OWNERGROUP))
+        if (flags.HasFlag(FileAttributeFlags.UIDGUID))
         {
             await Write(attributes.Uid, cancellationToken).ConfigureAwait(false);
             await Write(attributes.Gid, cancellationToken).ConfigureAwait(false);
@@ -73,55 +60,34 @@ public class SshStreamWriter
             await Write(attributes.Permissions, cancellationToken).ConfigureAwait(false);
         }
 
-        if (flags.HasFlag(FileAttributeFlags.ACCESSTIME))
+        if (flags.HasFlag(FileAttributeFlags.ACMODTIME))
         {
-            await Write(attributes.LastAccessedTime, flags.HasFlag(FileAttributeFlags.SUBSECOND_TIMES), cancellationToken).ConfigureAwait(false);
+            await Write(attributes.LastAccessedTime, cancellationToken).ConfigureAwait(false);
+            await Write(attributes.LastModifiedTime, cancellationToken).ConfigureAwait(false);
         }
 
-        if (flags.HasFlag(FileAttributeFlags.CREATETIME))
+        if (flags.HasFlag(FileAttributeFlags.EXTENDED))
         {
-            await Write(attributes.CreationTime, flags.HasFlag(FileAttributeFlags.SUBSECOND_TIMES), cancellationToken).ConfigureAwait(false);
-        }
-
-        if (flags.HasFlag(FileAttributeFlags.MODIFYTIME))
-        {
-            await Write(attributes.LastModifiedTime, flags.HasFlag(FileAttributeFlags.SUBSECOND_TIMES), cancellationToken).ConfigureAwait(false);
-        }
-
-        if (flags.HasFlag(FileAttributeFlags.ACL))
-        {
-            await Write(attributes.ACLs, cancellationToken).ConfigureAwait(false);
-        }
-        //Write(0);  //extended type
-        //Write(0);  //extended data
-    }
-
-    public async Task Write(DateTimeOffset dateTime, bool subseconds, CancellationToken cancellationToken = default)
-    {
-        await Write(dateTime.ToUnixTimeSeconds(), cancellationToken).ConfigureAwait(false);
-        if (subseconds)
-        {
-            await Write(dateTime.Millisecond * 10 ^ 6, cancellationToken).ConfigureAwait(false);
+            await Write(attributes.ExtendeAttributes.Count, cancellationToken).ConfigureAwait(false);
+            foreach (var a in attributes.ExtendeAttributes)
+            {
+                await Write(a.Key, cancellationToken).ConfigureAwait(false);    //type
+                await Write(a.Value, cancellationToken).ConfigureAwait(false);  //data
+            }
         }
     }
 
-    public async Task Write(ACL[] acls, CancellationToken cancellationToken = default)
-    {
-        await Write(acls.Length, cancellationToken).ConfigureAwait(false);
-        foreach (var acl in acls)
-        {
-            await Write(acl.ACEType, cancellationToken).ConfigureAwait(false);
-            await Write(acl.ACEFlags, cancellationToken).ConfigureAwait(false);
-            await Write(acl.ACEMask, cancellationToken).ConfigureAwait(false);
-            await Write(acl.Who, cancellationToken).ConfigureAwait(false);
-        }
-    }
+    public async Task Write(DateTimeOffset dateTime, CancellationToken cancellationToken = default)
+        => await Write((uint)dateTime.ToUnixTimeSeconds(), cancellationToken).ConfigureAwait(false);
 
     public async Task Write(FileSystemInfo fileInfo, CancellationToken cancellationToken = default)
     {
+        var fileattrs = new Attributes(fileInfo);
         await Write(fileInfo.Name, cancellationToken).ConfigureAwait(false);
-        await Write(new Attributes(fileInfo), FileAttributeFlags.DEFAULT, cancellationToken).ConfigureAwait(false);
+        await Write(fileattrs.GetLongFileName(fileInfo.Name), cancellationToken).ConfigureAwait(false);
+        await Write(fileattrs, FileAttributeFlags.DEFAULT, cancellationToken).ConfigureAwait(false);
     }
+
 
     public Task Write(bool value, CancellationToken cancellationToken = default)
         => Write(value ? (byte)1 : (byte)0, cancellationToken);
@@ -172,8 +138,8 @@ public class SshStreamWriter
         await _stream.WriteAsync(len, cancellationToken).ConfigureAwait(false);
         await _stream.WriteAsync(data, cancellationToken).ConfigureAwait(false);
 
-        logger.LogInformation(string.Join(" ", data.Select(d => d.ToString("X2"))));
-        logger.LogInformation(string.Join(" ", data.Select(d => (d >= 32 && d < 127 ? ((char)d).ToString() : ".").PadLeft(2))));
+        logger.LogInformation("HEX  : {data}", string.Join(" ", data.Select(d => d.ToString("X2"))));
+        logger.LogInformation("ASCII: {data}", string.Join(" ", data.Select(d => (d >= 32 && d < 127 ? ((char)d).ToString() : ".").PadLeft(2))));
 
         _memorystream.Position = 0;
         _memorystream.SetLength(0);

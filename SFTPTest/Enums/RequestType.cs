@@ -21,6 +21,7 @@ public enum RequestType : byte
     STAT = 0x11,
     RENAME = 0x12,
     READLINK = 0x13,
+    SYMLINK = 0x14,
 
     EXTENDED = 0xC8
 }

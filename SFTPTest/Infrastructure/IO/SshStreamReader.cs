@@ -39,51 +39,35 @@ public class SshStreamReader
     public async Task<FileAttributeFlags> ReadFileAttributeFlags(CancellationToken cancellationToken = default)
         => (FileAttributeFlags)await ReadUInt32(cancellationToken).ConfigureAwait(false);
 
-    public async Task<DateTimeOffset> ReadTime(bool subseconds, CancellationToken cancellationToken = default)
+    public async Task<DateTimeOffset> ReadTime(CancellationToken cancellationToken = default)
     {
-        var seconds = await ReadInt64(cancellationToken).ConfigureAwait(false);
+        var seconds = await ReadUInt32(cancellationToken).ConfigureAwait(false);
         return seconds > 0
             ? DateTimeOffset.FromUnixTimeSeconds(seconds)
-                .AddMilliseconds((subseconds ? await ReadUInt32(cancellationToken).ConfigureAwait(false) : 0) * 10 ^ 6)
             : DateTimeOffset.MinValue;
     }
 
     public async Task<Attributes> ReadAttributes(CancellationToken cancellationToken = default)
     {
         var flags = (FileAttributeFlags)await ReadUInt32(cancellationToken).ConfigureAwait(false);
-        var type = (FileType)await ReadByte(cancellationToken).ConfigureAwait(false);
         var size = flags.HasFlag(FileAttributeFlags.SIZE) ? await ReadUInt64(cancellationToken).ConfigureAwait(false) : 0;
-        var owner = flags.HasFlag(FileAttributeFlags.OWNERGROUP) ? await ReadString(cancellationToken).ConfigureAwait(false) : string.Empty;
-        var group = flags.HasFlag(FileAttributeFlags.OWNERGROUP) ? await ReadString(cancellationToken).ConfigureAwait(false) : string.Empty;
+        var owner = flags.HasFlag(FileAttributeFlags.UIDGUID) ? await ReadUInt32(cancellationToken).ConfigureAwait(false) : 0;
+        var group = flags.HasFlag(FileAttributeFlags.UIDGUID) ? await ReadUInt32(cancellationToken).ConfigureAwait(false) : 0;
         var permissions = flags.HasFlag(FileAttributeFlags.PERMISSIONS) ? (Permissions)await ReadUInt32(cancellationToken).ConfigureAwait(false) : Permissions.None;
-        var atime = flags.HasFlag(FileAttributeFlags.ACCESSTIME) ? await ReadTime(flags.HasFlag(FileAttributeFlags.SUBSECOND_TIMES), cancellationToken).ConfigureAwait(false) : DateTimeOffset.MinValue;
-        var ctime = flags.HasFlag(FileAttributeFlags.CREATETIME) ? await ReadTime(flags.HasFlag(FileAttributeFlags.SUBSECOND_TIMES), cancellationToken).ConfigureAwait(false) : DateTimeOffset.MinValue;
-        var mtime = flags.HasFlag(FileAttributeFlags.MODIFYTIME) ? await ReadTime(flags.HasFlag(FileAttributeFlags.SUBSECOND_TIMES), cancellationToken).ConfigureAwait(false) : DateTimeOffset.MinValue;
-        var acls = flags.HasFlag(FileAttributeFlags.ACL) ? await ReadACLs(cancellationToken).ConfigureAwait(false) : Array.Empty<ACL>();
+        var atime = flags.HasFlag(FileAttributeFlags.ACMODTIME) ? await ReadTime(cancellationToken).ConfigureAwait(false) : DateTimeOffset.MinValue;
+        var mtime = flags.HasFlag(FileAttributeFlags.ACMODTIME) ? await ReadTime(cancellationToken).ConfigureAwait(false) : DateTimeOffset.MinValue;
         var extended_count = flags.HasFlag(FileAttributeFlags.EXTENDED) ? await ReadUInt32(cancellationToken).ConfigureAwait(false) : 0;
 
-        if (extended_count > 0)
+        var attrs = new Attributes(size, owner, group, permissions, atime, mtime);
+
+        for (var i = 0; i < extended_count; i++)
         {
-            throw new Exception("Extended attributes currently not supported");
+            var type = await ReadString(cancellationToken).ConfigureAwait(false);
+            var data = await ReadString(cancellationToken).ConfigureAwait(false);
+            attrs.ExtendeAttributes.Add(type, data);
         }
 
-        return new Attributes(type, size, owner, group, permissions, ctime, atime, mtime, acls);
-    }
-
-    public async Task<ACL[]> ReadACLs(CancellationToken cancellationToken = default)
-    {
-        var acecount = await ReadUInt32(cancellationToken).ConfigureAwait(false);
-        var acls = new ACL[(int)acecount];
-        for (var i = 0; i < acecount; i++)
-        {
-            acls[i] = new ACL(
-                (ACEType)await ReadUInt32(cancellationToken).ConfigureAwait(false),
-                (ACEFlags)await ReadUInt32(cancellationToken).ConfigureAwait(false),
-                (ACEMask)await ReadUInt32(cancellationToken).ConfigureAwait(false),
-                await ReadString(cancellationToken).ConfigureAwait(false)
-            );
-        }
-        return acls;
+        return attrs;
     }
 
     public async Task<byte[]> ReadBinary(CancellationToken cancellationToken = default)
