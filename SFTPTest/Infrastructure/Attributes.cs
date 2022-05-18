@@ -44,11 +44,19 @@ public record Attributes(
               GetLength(fsInfo),
               _defaultowner,
               _defaultgroup,
-              _defaultpermissions | (fsInfo is DirectoryInfo ? Permissions.Directory : Permissions.None),
+              _defaultpermissions | GetFileTypeBits(fsInfo),
               fsInfo.LastAccessTimeUtc,
               fsInfo.LastWriteTimeUtc
             )
     { }
+
+    private static Permissions GetFileTypeBits(FileSystemInfo fsInfo)
+        => fsInfo switch
+        {
+            DirectoryInfo => Permissions.Directory,
+            FileInfo => Permissions.Regular_File,
+            _ => Permissions.None
+        };
 
     private static ulong GetLength(FileSystemInfo fsInfo)
         => fsInfo switch

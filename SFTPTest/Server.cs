@@ -249,7 +249,6 @@ public class Server : IServer
             await session.Writer.Write(ResponseType.NAME, cancellationToken).ConfigureAwait(false);
             await session.Writer.Write(requestid, cancellationToken).ConfigureAwait(false);
             await session.Writer.Write(new DirectoryInfo(path).GetFileSystemInfos().OrderBy(f => f.Name).ToArray(), cancellationToken).ConfigureAwait(false);
-            await session.Writer.Write(true, cancellationToken).ConfigureAwait(false); // End of list
 
             session.FileHandles.Remove(handle);
         }
