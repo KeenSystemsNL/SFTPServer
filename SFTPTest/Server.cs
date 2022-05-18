@@ -3,6 +3,7 @@ using Microsoft.Extensions.Options;
 using SFTPTest.Enums;
 using SFTPTest.Infrastructure;
 using SFTPTest.Infrastructure.IO;
+using System.Diagnostics.CodeAnalysis;
 
 namespace SFTPTest;
 
@@ -115,7 +116,7 @@ public class Server : IServer
     {
         var path = GetPath(session, await session.Reader.ReadString(cancellationToken).ConfigureAwait(false));
 
-        session.Logger.LogInformation("Sending STAT");
+        session.Logger.LogInformation("Sending STAT for {path}", path);
         await SendStat(session, requestid, path, cancellationToken).ConfigureAwait(false);
     }
 
@@ -281,12 +282,12 @@ public class Server : IServer
         var filename = GetPath(session, await session.Reader.ReadString(cancellationToken).ConfigureAwait(false));
 
         session.Logger.LogInformation("DELETE: {filename}", filename);
-        try
+        if (TryGetFSObject(filename, out var fsObject) && fsObject is FileInfo)
         {
-            File.Delete(filename);
+            File.Delete(fsObject.FullName);
             await SendStatus(session, requestid, Status.OK, cancellationToken).ConfigureAwait(false);
         }
-        catch
+        else
         {
             await SendStatus(session, requestid, Status.FAILURE, cancellationToken).ConfigureAwait(false);  // TODO: Return (more) correct status like NO_SUCH_FILE or PERMISSION_DENIED etc.
         }
@@ -298,12 +299,12 @@ public class Server : IServer
         var newfilename = GetPath(session, await session.Reader.ReadString(cancellationToken).ConfigureAwait(false));
 
         session.Logger.LogInformation("RENAME: {oldfilename} -> {newfilename}", oldfilename, newfilename);
-        try
+        if (TryGetFSObject(oldfilename, out var fsOldObject) && fsOldObject is FileInfo)
         {
-            File.Move(oldfilename, newfilename);
+            File.Move(fsOldObject.FullName, newfilename);
             await SendStatus(session, requestid, Status.OK, cancellationToken).ConfigureAwait(false);
         }
-        catch
+        else
         {
             await SendStatus(session, requestid, Status.FAILURE, cancellationToken).ConfigureAwait(false);  // TODO: Return (more) correct status like NO_SUCH_FILE or PERMISSION_DENIED etc.
         }
@@ -312,15 +313,16 @@ public class Server : IServer
     private static async Task MakeDirHandler(Session session, uint requestid, CancellationToken cancellationToken = default)
     {
         var name = GetPath(session, await session.Reader.ReadString(cancellationToken).ConfigureAwait(false));
+        session.Logger.LogInformation("MAKEDIR {name}", name);
         var attrs = session.Reader.ReadAttributes(cancellationToken);
 
         session.Logger.LogInformation("MAKEDIR: {name} [{attributes}]", name, attrs);
-        try
+        if (!TryGetFSObject(name, out var fsObject))
         {
             Directory.CreateDirectory(name);
             await SendStatus(session, requestid, Status.OK, cancellationToken).ConfigureAwait(false);
         }
-        catch
+        else
         {
             await SendStatus(session, requestid, Status.FAILURE, cancellationToken).ConfigureAwait(false);  // TODO: Return (more) correct status like NO_SUCH_FILE or PERMISSION_DENIED etc.
         }
@@ -330,12 +332,12 @@ public class Server : IServer
     {
         var name = GetPath(session, await session.Reader.ReadString(cancellationToken).ConfigureAwait(false));
         session.Logger.LogInformation("REMOVEDIR: {name}", name);
-        try
+        if (TryGetFSObject(name, out var fsObject) && fsObject is DirectoryInfo)
         {
             Directory.Delete(name);
             await SendStatus(session, requestid, Status.OK, cancellationToken).ConfigureAwait(false);
         }
-        catch
+        else
         {
             await SendStatus(session, requestid, Status.FAILURE, cancellationToken).ConfigureAwait(false);  // TODO: Return (more) correct status like NO_SUCH_FILE or PERMISSION_DENIED etc.
         }
@@ -365,17 +367,16 @@ public class Server : IServer
 
     private static async Task SendStat(Session session, uint requestid, string path, CancellationToken cancellationToken = default)
     {
-        try
+        if (TryGetFSObject(path, out var fso))
         {
             await session.Writer.Write(ResponseType.ATTRS, cancellationToken).ConfigureAwait(false);
             await session.Writer.Write(requestid, cancellationToken).ConfigureAwait(false);
-            await session.Writer.Write(GetAttributes(path), FileAttributeFlags.DEFAULT, cancellationToken).ConfigureAwait(false);
+            await session.Writer.Write(new Attributes(fso), FileAttributeFlags.DEFAULT, cancellationToken).ConfigureAwait(false);
         }
-        catch
+        else
         {
-            await SendStatus(session, requestid, Status.FAILURE, cancellationToken).ConfigureAwait(false);
+            await SendStatus(session, requestid, Status.NO_SUCH_FILE, cancellationToken).ConfigureAwait(false);
         }
-        session.Logger.LogInformation("STAT sent");
     }
 
     private static Task SendStatus(Session session, uint requestId, Status status, CancellationToken cancellationToken = default)
@@ -405,6 +406,22 @@ public class Server : IServer
             _ => "Unknown error"
         };
 
+    private static bool TryGetFSObject(string path, [NotNullWhen(true)] out FileSystemInfo? fileSystemObject)
+    {
+        if (Directory.Exists(path))
+        {
+            fileSystemObject = new DirectoryInfo(path);
+            return true;
+        }
+        if (File.Exists(path))
+        {
+            fileSystemObject = new FileInfo(path);
+            return true;
+        }
+        fileSystemObject = null;
+        return false;
+    }
+
     private static string GetHandle()
         => Guid.NewGuid().ToString("N");
 
@@ -412,20 +429,5 @@ public class Server : IServer
     {
         var result = Path.GetFullPath(Path.Combine(session.Root, path.TrimStart('/'))).Replace('/', '\\');
         return result.StartsWith(session.Root) ? result : session.Root;
-    }
-
-    private static Attributes GetAttributes(string path)
-    {
-        if (Directory.Exists(path))
-        {
-            return new Attributes(new DirectoryInfo(path));
-        }
-
-        if (File.Exists(path))
-        {
-            return new Attributes(new FileInfo(path));
-        }
-
-        throw new Exception($"Path {path} not found");
     }
 }
