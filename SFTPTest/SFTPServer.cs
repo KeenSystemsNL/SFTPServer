@@ -117,7 +117,7 @@ public class SFTPServer : ISTPServer
     private async Task RealPathHandler(uint requestId, CancellationToken cancellationToken = default)
     {
         var path = await _reader.ReadString(cancellationToken).ConfigureAwait(false);
-        if (path == ".")
+        if (string.IsNullOrEmpty(path) || path == ".")
         {
             path = "/";
         }
