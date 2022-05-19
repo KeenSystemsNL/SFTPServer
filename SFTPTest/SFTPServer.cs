@@ -80,7 +80,7 @@ public class SFTPServer : ISTPServer
                         }
                         catch (SFTPHandlerException ex)
                         {
-                            _logger.LogError(ex, "SFTPHandler returned an error");
+                            _logger.Log(ex.LogLevel, ex, "SFTPHandler exception");
                             await SendStatus(requestid, ex.Status, cancellationToken).ConfigureAwait(false);
                         }
                         catch (Exception ex)

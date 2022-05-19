@@ -1,11 +1,9 @@
-﻿using SFTPTest.Enums;
+﻿namespace SFTPTest.Exceptions;
 
-namespace SFTPTest.Exceptions;
-
-public class HandleNotFoundException : SFTPHandlerException
+public class HandleNotFoundException : NotFoundException
 {
     public string Handle { get; init; }
 
     public HandleNotFoundException(string handle)
-        : base(Status.NO_SUCH_FILE) => Handle = handle;
+        => Handle = handle;
 }
