@@ -11,7 +11,4 @@ internal record Session(
     uint Version,
     string Root,
     ILogger Logger
-)
-{
-
-}
+);
