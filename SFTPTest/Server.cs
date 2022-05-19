@@ -74,7 +74,7 @@ public class Server : IServer
                 }
 
                 // Write response
-                await writer.Flush(_logger, cancellationToken).ConfigureAwait(false);
+                await writer.Flush(cancellationToken).ConfigureAwait(false);
             }
         } while (!cancellationToken.IsCancellationRequested && msglength > 0);
     }

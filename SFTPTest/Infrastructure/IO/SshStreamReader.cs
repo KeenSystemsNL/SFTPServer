@@ -12,9 +12,6 @@ public class SshStreamReader
     public SshStreamReader(Stream stream)
         => _stream = stream ?? throw new ArgumentNullException(nameof(stream));
 
-    public async Task<bool> ReadBoolean(CancellationToken cancellationToken = default)
-        => await ReadByte(cancellationToken).ConfigureAwait(false) != 0;
-
     public async Task<byte> ReadByte(CancellationToken cancellationToken = default)
         => (await ReadBinary(1, cancellationToken).ConfigureAwait(false))[0];
 
@@ -24,20 +21,11 @@ public class SshStreamReader
     public async Task<ulong> ReadUInt64(CancellationToken cancellationToken = default)
         => BinaryPrimitives.ReadUInt64BigEndian(await ReadBinary(8, cancellationToken).ConfigureAwait(false));
 
-    public async Task<long> ReadInt64(CancellationToken cancellationToken = default)
-        => BinaryPrimitives.ReadInt64BigEndian(await ReadBinary(8, cancellationToken).ConfigureAwait(false));
-
-    public async Task<string> ReadString(int length, CancellationToken cancellationToken = default)
-        => _encoding.GetString(await ReadBinary(length, cancellationToken).ConfigureAwait(false));
-
     public async Task<string> ReadString(CancellationToken cancellationToken = default)
         => _encoding.GetString(await ReadBinary(cancellationToken).ConfigureAwait(false));
 
     public async Task<AccessFlags> ReadAccessFlags(CancellationToken cancellationToken = default)
         => (AccessFlags)await ReadUInt32(cancellationToken).ConfigureAwait(false);
-
-    public async Task<FileAttributeFlags> ReadFileAttributeFlags(CancellationToken cancellationToken = default)
-        => (FileAttributeFlags)await ReadUInt32(cancellationToken).ConfigureAwait(false);
 
     public async Task<DateTimeOffset> ReadTime(CancellationToken cancellationToken = default)
     {

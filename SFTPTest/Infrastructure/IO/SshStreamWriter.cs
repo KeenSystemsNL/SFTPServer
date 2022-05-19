@@ -1,5 +1,4 @@
-﻿using Microsoft.Extensions.Logging;
-using SFTPTest.Enums;
+﻿using SFTPTest.Enums;
 using System.Buffers.Binary;
 using System.Text;
 
@@ -88,18 +87,11 @@ public class SshStreamWriter
         await Write(fileattrs, FileAttributeFlags.DEFAULT, cancellationToken).ConfigureAwait(false);
     }
 
-
-    public Task Write(bool value, CancellationToken cancellationToken = default)
-        => Write(value ? (byte)1 : (byte)0, cancellationToken);
-
     public Task Write(byte value, CancellationToken cancellationToken = default)
         => Write(new[] { value }, cancellationToken);
 
     public Task Write(int value, CancellationToken cancellationToken = default)
         => Write((uint)value, cancellationToken);
-
-    public Task Write(long value, CancellationToken cancellationToken = default)
-        => Write((ulong)value, cancellationToken);
 
     public Task Write(uint value, CancellationToken cancellationToken = default)
     {
@@ -128,7 +120,7 @@ public class SshStreamWriter
     public Task Write(byte[] data, CancellationToken cancellationToken = default)
         => _memorystream.WriteAsync(data, 0, data.Length, cancellationToken);
 
-    public async Task Flush(ILogger logger, CancellationToken cancellationToken = default)
+    public async Task Flush(CancellationToken cancellationToken = default)
     {
         var data = _memorystream.ToArray();
 
