@@ -1,5 +1,4 @@
-﻿using Microsoft.Extensions.Logging;
-using SFTPTest.Infrastructure.IO;
+﻿using SFTPTest.Infrastructure.IO;
 
 namespace SFTPTest.Infrastructure;
 
@@ -9,6 +8,5 @@ internal record Session(
     FileHandleCollection FileHandles,
     FileStreamCollection FileStreams,
     uint Version,
-    string Root,
-    ILogger Logger
+    string Root
 );

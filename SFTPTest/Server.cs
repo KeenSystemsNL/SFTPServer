@@ -60,7 +60,7 @@ public class Server : IServer
                 {
                     // Get requestid
                     var requestid = await reader.ReadUInt32(cancellationToken).ConfigureAwait(false);
-                    _logger.LogInformation("=== {msgtype} [{msglength}] ===", msgtype, msglength);
+                    _logger.LogInformation("{msgtype} [ID: {requestid} LEN: {msglength}]", msgtype, requestid, msglength);
 
                     // Get handler and handle the message when supported
                     if (_messagehandlers.TryGetValue(msgtype, out var handler))
@@ -77,7 +77,6 @@ public class Server : IServer
                 await writer.Flush(_logger, cancellationToken).ConfigureAwait(false);
             }
         } while (!cancellationToken.IsCancellationRequested && msglength > 0);
-        _logger.LogInformation("Cancel: {cancel}, EOF: {eof}", cancellationToken.IsCancellationRequested, msglength > 0);
     }
 
     private async Task<Session> InitHandler(SshStreamReader reader, SshStreamWriter writer, CancellationToken cancellationToken = default)
@@ -88,11 +87,10 @@ public class Server : IServer
 
         _logger.LogInformation("CLIENT version {clientversion}, sending version {serverversion}", clientversion, version);
 
-
         // Send version response
         await writer.Write(RequestType.VERSION, cancellationToken).ConfigureAwait(false);
         await writer.Write(version, cancellationToken).ConfigureAwait(false);
-        return new Session(reader, writer, new FileHandleCollection(), new FileStreamCollection(), version, _options.Root, _logger);
+        return new Session(reader, writer, new FileHandleCollection(), new FileStreamCollection(), version, _options.Root);
     }
 
     private static async Task RealPathHandler(Session session, uint requestid, CancellationToken cancellationToken = default)
@@ -103,7 +101,6 @@ public class Server : IServer
             path = "/";
         }
 
-        session.Logger.LogInformation("Path: {path}", GetPath(session, path));
         await session.Writer.Write(ResponseType.NAME, cancellationToken).ConfigureAwait(false);
         await session.Writer.Write(requestid, cancellationToken).ConfigureAwait(false);
         await session.Writer.Write(new[] { new VirtualPath(path) }, cancellationToken).ConfigureAwait(false);
@@ -116,7 +113,6 @@ public class Server : IServer
     {
         var path = GetPath(session, await session.Reader.ReadString(cancellationToken).ConfigureAwait(false));
 
-        session.Logger.LogInformation("Sending STAT for {path}", path);
         await SendStat(session, requestid, path, cancellationToken).ConfigureAwait(false);
     }
 
@@ -169,7 +165,6 @@ public class Server : IServer
         var handle = GetHandle();
         session.FileHandles.Add(handle, path);
 
-        session.Logger.LogInformation("Path: {path}, Handle: {handle}", path, handle);
         await SendHandle(session, requestid, handle, cancellationToken).ConfigureAwait(false);
     }
 
@@ -183,7 +178,6 @@ public class Server : IServer
         session.FileStreams.Add(handle, File.Open(GetPath(session, filename), flags.ToFileMode(), flags.ToFileAccess(), FileShare.ReadWrite));
         session.FileHandles.Add(handle, GetPath(session, filename));
 
-        session.Logger.LogInformation("File: {filename}, Flags: {flags}, Attrs: {attrs}", filename, flags, attrs);
         await SendHandle(session, requestid, handle, cancellationToken).ConfigureAwait(false);
     }
 
@@ -223,7 +217,6 @@ public class Server : IServer
         var offset = (long)await session.Reader.ReadUInt64(cancellationToken).ConfigureAwait(false);
         var data = await session.Reader.ReadBinary(cancellationToken).ConfigureAwait(false);
 
-        session.Logger.LogInformation("Write {handle} from {offset}, {length} bytes", handle, offset, data.Length);
         if (session.FileStreams.TryGetValue(handle, out var stream))
         {
             if (stream.Position != offset)
@@ -245,8 +238,6 @@ public class Server : IServer
 
         if (session.FileHandles.TryGetValue(handle, out var path))
         {
-            session.Logger.LogInformation("Path: {path}, Handle: {handle}", path, handle);
-
             await session.Writer.Write(ResponseType.NAME, cancellationToken).ConfigureAwait(false);
             await session.Writer.Write(requestid, cancellationToken).ConfigureAwait(false);
             await session.Writer.Write(new DirectoryInfo(path).GetFileSystemInfos().OrderBy(f => f.Name).ToArray(), cancellationToken).ConfigureAwait(false);
@@ -262,8 +253,6 @@ public class Server : IServer
     private static async Task CloseHandler(Session session, uint requestId, CancellationToken cancellationToken = default)
     {
         var handle = await session.Reader.ReadString(cancellationToken).ConfigureAwait(false);
-
-        session.Logger.LogInformation("Handle: {handle}", handle);
 
         session.FileHandles.Remove(handle);
 
@@ -281,7 +270,6 @@ public class Server : IServer
     {
         var filename = GetPath(session, await session.Reader.ReadString(cancellationToken).ConfigureAwait(false));
 
-        session.Logger.LogInformation("DELETE: {filename}", filename);
         if (TryGetFSObject(filename, out var fsObject) && fsObject is FileInfo)
         {
             File.Delete(fsObject.FullName);
@@ -298,7 +286,6 @@ public class Server : IServer
         var oldfilename = GetPath(session, await session.Reader.ReadString(cancellationToken).ConfigureAwait(false));
         var newfilename = GetPath(session, await session.Reader.ReadString(cancellationToken).ConfigureAwait(false));
 
-        session.Logger.LogInformation("RENAME: {oldfilename} -> {newfilename}", oldfilename, newfilename);
         if (TryGetFSObject(oldfilename, out var fsOldObject) && fsOldObject is FileInfo)
         {
             File.Move(fsOldObject.FullName, newfilename);
@@ -313,10 +300,8 @@ public class Server : IServer
     private static async Task MakeDirHandler(Session session, uint requestid, CancellationToken cancellationToken = default)
     {
         var name = GetPath(session, await session.Reader.ReadString(cancellationToken).ConfigureAwait(false));
-        session.Logger.LogInformation("MAKEDIR {name}", name);
         var attrs = session.Reader.ReadAttributes(cancellationToken);
 
-        session.Logger.LogInformation("MAKEDIR: {name} [{attributes}]", name, attrs);
         if (!TryGetFSObject(name, out var fsObject))
         {
             Directory.CreateDirectory(name);
@@ -331,7 +316,6 @@ public class Server : IServer
     private static async Task RemoveDirHandler(Session session, uint requestid, CancellationToken cancellationToken = default)
     {
         var name = GetPath(session, await session.Reader.ReadString(cancellationToken).ConfigureAwait(false));
-        session.Logger.LogInformation("REMOVEDIR: {name}", name);
         if (TryGetFSObject(name, out var fsObject) && fsObject is DirectoryInfo)
         {
             Directory.Delete(name);
@@ -346,15 +330,12 @@ public class Server : IServer
 
     private static Task DoStat(Session session, uint requestid, string path, Attributes attributes, CancellationToken cancellationToken = default)
     {
-        session.Logger.LogInformation("Stat: {path}, attributes: {flags}", path, attributes);
+        if (attributes.LastModifiedTime != DateTimeOffset.MinValue)
+        {
+            File.SetLastWriteTimeUtc(path, attributes.LastModifiedTime.UtcDateTime);
+        }
+        //TODO: implement permissions??
 
-        //if (attributes.LastModifiedTime != DateTimeOffset.MinValue)
-        //{
-        //    session.Logger.LogInformation("Setting MTime {path} to {mtime}", path, attributes.LastModifiedTime.UtcDateTime);
-        //    File.SetLastWriteTimeUtc(path, attributes.LastModifiedTime.UtcDateTime);
-        //}
-
-        //TODO: implement
         return Task.CompletedTask;
     }
 

@@ -77,7 +77,13 @@ public class SshStreamReader
     private async Task<byte[]> ReadBinary(int length, CancellationToken cancellationToken = default)
     {
         var buffer = new byte[length];
-        await _stream.ReadAsync(buffer.AsMemory(0, length), cancellationToken).ConfigureAwait(false);
+        var offset = 0;
+        var bytesread = 0;
+        do
+        {
+            bytesread = await _stream.ReadAsync(buffer.AsMemory(offset, length - offset), cancellationToken).ConfigureAwait(false);
+            offset += bytesread;
+        } while (!cancellationToken.IsCancellationRequested && bytesread > 0 && offset < length);
 
         return buffer;
     }

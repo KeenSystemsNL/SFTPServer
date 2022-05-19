@@ -138,9 +138,6 @@ public class SshStreamWriter
         await _stream.WriteAsync(len, cancellationToken).ConfigureAwait(false);
         await _stream.WriteAsync(data, cancellationToken).ConfigureAwait(false);
 
-        logger.LogInformation("HEX  : {data}", string.Join(" ", data.Select(d => d.ToString("X2"))));
-        logger.LogInformation("ASCII: {data}", string.Join(" ", data.Select(d => (d >= 32 && d < 127 ? ((char)d).ToString() : ".").PadLeft(2))));
-
         _memorystream.Position = 0;
         _memorystream.SetLength(0);
     }
