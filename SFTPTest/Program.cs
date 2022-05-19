@@ -33,7 +33,6 @@ public class Program
 
 
         _logger.LogInformation("Starting server...");
-        using var cts = new CancellationTokenSource();
         using var stdin = Console.OpenStandardInput();
         using var stdout = Console.OpenStandardOutput();
 
@@ -41,10 +40,11 @@ public class Program
             serviceprovider.GetRequiredService<IOptions<ServerOptions>>(),
             serviceprovider.GetRequiredService<ILogger<Server>>(),
             stdin,
-            stdout,
-            cts.Token
+            stdout
         );
-        await server.Run().ConfigureAwait(false);
+
+        using var cts = new CancellationTokenSource();
+        await server.Run(cts.Token).ConfigureAwait(false);
         _logger.LogInformation("Server stopped...");
     }
 

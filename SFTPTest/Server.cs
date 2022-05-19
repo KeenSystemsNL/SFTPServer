@@ -11,7 +11,6 @@ public class Server : IServer
 {
     private readonly ServerOptions _options;
     private readonly ILogger<Server> _logger;
-    private readonly CancellationToken _cancellationtoken;
     private readonly SshStreamReader _reader;
     private readonly SshStreamWriter _writer;
     private readonly Dictionary<string, string> _filehandles = new();
@@ -25,9 +24,8 @@ public class Server : IServer
         _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
-        _reader = new SshStreamReader(@in);
-        _writer = new SshStreamWriter(@out, _options.MaxMessageSize);
-        _cancellationtoken = cancellationToken;
+        _reader = new SshStreamReader(@in ?? throw new ArgumentNullException(nameof(@in)));
+        _writer = new SshStreamWriter(@out ?? throw new ArgumentNullException(nameof(@out)), _options.MaxMessageSize);
 
         _messagehandlers = new()
         {
@@ -50,41 +48,41 @@ public class Server : IServer
         };
     }
 
-    public async Task Run()
+    public async Task Run(CancellationToken cancellationToken = default)
     {
         uint msglength;
         do
         {
-            msglength = await _reader.ReadUInt32(_cancellationtoken).ConfigureAwait(false);
+            msglength = await _reader.ReadUInt32(cancellationToken).ConfigureAwait(false);
             if (msglength > 0)
             {
                 // Determine message type
-                var msgtype = (RequestType)await _reader.ReadByte(_cancellationtoken).ConfigureAwait(false);
+                var msgtype = (RequestType)await _reader.ReadByte(cancellationToken).ConfigureAwait(false);
                 if (_protocolversion == 0 && msgtype is RequestType.INIT)
                 {
-                    await InitHandler(_cancellationtoken).ConfigureAwait(false);
+                    await InitHandler(cancellationToken).ConfigureAwait(false);
                 }
                 else if (_protocolversion > 0)
                 {
                     // Get requestid
-                    var requestid = await _reader.ReadUInt32(_cancellationtoken).ConfigureAwait(false);
+                    var requestid = await _reader.ReadUInt32(cancellationToken).ConfigureAwait(false);
                     _logger.LogInformation("{msgtype} [ID: {requestid} LEN: {msglength}]", msgtype, requestid, msglength);
 
                     // Get handler and handle the message when supported
                     if (_messagehandlers.TryGetValue(msgtype, out var handler))
                     {
-                        await handler(requestid, _cancellationtoken).ConfigureAwait(false);
+                        await handler(requestid, cancellationToken).ConfigureAwait(false);
                     }
                     else
                     {
-                        await SendStatus(requestid, Status.OP_UNSUPPORTED, _cancellationtoken).ConfigureAwait(false);
+                        await SendStatus(requestid, Status.OP_UNSUPPORTED, cancellationToken).ConfigureAwait(false);
                     }
                 }
 
                 // Write response
-                await _writer.Flush(_cancellationtoken).ConfigureAwait(false);
+                await _writer.Flush(cancellationToken).ConfigureAwait(false);
             }
-        } while (!_cancellationtoken.IsCancellationRequested && msglength > 0);
+        } while (!cancellationToken.IsCancellationRequested && msglength > 0);
     }
 
     private async Task InitHandler(CancellationToken cancellationToken = default)
