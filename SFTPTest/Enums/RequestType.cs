@@ -1,6 +1,6 @@
 ﻿namespace SFTPTest.Enums;
 
-public enum RequestType : byte
+internal enum RequestType : byte
 {
     INIT = 0x01,
     VERSION = 0x02,

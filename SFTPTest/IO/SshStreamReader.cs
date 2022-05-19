@@ -1,10 +1,11 @@
 ﻿using SFTPTest.Enums;
+using SFTPTest.Models;
 using System.Buffers.Binary;
 using System.Text;
 
-namespace SFTPTest.Infrastructure.IO;
+namespace SFTPTest.IO;
 
-public class SshStreamReader
+internal class SshStreamReader
 {
     private readonly Stream _stream;
     private static readonly Encoding _encoding = new UTF8Encoding(false);
@@ -35,18 +36,18 @@ public class SshStreamReader
             : DateTimeOffset.MinValue;
     }
 
-    public async Task<Attributes> ReadAttributes(CancellationToken cancellationToken = default)
+    public async Task<SFTPAttributes> ReadAttributes(CancellationToken cancellationToken = default)
     {
-        var flags = (FileAttributeFlags)await ReadUInt32(cancellationToken).ConfigureAwait(false);
-        var size = flags.HasFlag(FileAttributeFlags.SIZE) ? await ReadUInt64(cancellationToken).ConfigureAwait(false) : 0;
-        var owner = flags.HasFlag(FileAttributeFlags.UIDGUID) ? await ReadUInt32(cancellationToken).ConfigureAwait(false) : 0;
-        var group = flags.HasFlag(FileAttributeFlags.UIDGUID) ? await ReadUInt32(cancellationToken).ConfigureAwait(false) : 0;
-        var permissions = flags.HasFlag(FileAttributeFlags.PERMISSIONS) ? (Permissions)await ReadUInt32(cancellationToken).ConfigureAwait(false) : Permissions.None;
-        var atime = flags.HasFlag(FileAttributeFlags.ACMODTIME) ? await ReadTime(cancellationToken).ConfigureAwait(false) : DateTimeOffset.MinValue;
-        var mtime = flags.HasFlag(FileAttributeFlags.ACMODTIME) ? await ReadTime(cancellationToken).ConfigureAwait(false) : DateTimeOffset.MinValue;
-        var extended_count = flags.HasFlag(FileAttributeFlags.EXTENDED) ? await ReadUInt32(cancellationToken).ConfigureAwait(false) : 0;
+        var flags = (PFlags)await ReadUInt32(cancellationToken).ConfigureAwait(false);
+        var size = flags.HasFlag(PFlags.SIZE) ? await ReadUInt64(cancellationToken).ConfigureAwait(false) : 0;
+        var owner = flags.HasFlag(PFlags.UIDGUID) ? await ReadUInt32(cancellationToken).ConfigureAwait(false) : 0;
+        var group = flags.HasFlag(PFlags.UIDGUID) ? await ReadUInt32(cancellationToken).ConfigureAwait(false) : 0;
+        var permissions = flags.HasFlag(PFlags.PERMISSIONS) ? (Permissions)await ReadUInt32(cancellationToken).ConfigureAwait(false) : Permissions.None;
+        var atime = flags.HasFlag(PFlags.ACMODTIME) ? await ReadTime(cancellationToken).ConfigureAwait(false) : DateTimeOffset.MinValue;
+        var mtime = flags.HasFlag(PFlags.ACMODTIME) ? await ReadTime(cancellationToken).ConfigureAwait(false) : DateTimeOffset.MinValue;
+        var extended_count = flags.HasFlag(PFlags.EXTENDED) ? await ReadUInt32(cancellationToken).ConfigureAwait(false) : 0;
 
-        var attrs = new Attributes(size, owner, group, permissions, atime, mtime);
+        var attrs = new SFTPAttributes(size, owner, group, permissions, atime, mtime);
 
         for (var i = 0; i < extended_count; i++)
         {
@@ -66,7 +67,7 @@ public class SshStreamReader
     {
         var buffer = new byte[length];
         var offset = 0;
-        var bytesread = 0;
+        int bytesread;
         do
         {
             bytesread = await _stream.ReadAsync(buffer.AsMemory(offset, length - offset), cancellationToken).ConfigureAwait(false);

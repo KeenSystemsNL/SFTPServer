@@ -1,7 +1,7 @@
 ﻿namespace SFTPTest.Enums;
 
 [Flags]
-public enum FileAttributeFlags : uint
+internal enum PFlags : uint
 {
     SIZE = 0x00000001,
     UIDGUID = 0x00000002,

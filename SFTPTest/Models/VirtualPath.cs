@@ -1,6 +1,6 @@
-﻿namespace SFTPTest.Infrastructure;
+﻿namespace SFTPTest.Models;
 
-public class VirtualPath : FileSystemInfo
+internal class VirtualPath : FileSystemInfo
 {
     public override bool Exists => true;
     public override string Name { get; }

@@ -1,6 +1,6 @@
 ﻿namespace SFTPTest;
 
-public record ServerOptions()
+public record SFTPServerOptions()
 {
     public int MaxMessageSize { get; init; }
     public string Root { get; init; } = string.Empty;

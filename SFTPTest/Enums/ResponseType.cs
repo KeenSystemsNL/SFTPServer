@@ -1,6 +1,6 @@
 ﻿namespace SFTPTest.Enums;
 
-public enum ResponseType : byte
+internal enum ResponseType : byte
 {
     STATUS = 0x65,
     HANDLE = 0x66,

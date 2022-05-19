@@ -1,10 +1,11 @@
 ﻿using SFTPTest.Enums;
+using SFTPTest.Models;
 using System.Buffers.Binary;
 using System.Text;
 
-namespace SFTPTest.Infrastructure.IO;
+namespace SFTPTest.IO;
 
-public class SshStreamWriter
+internal class SshStreamWriter
 {
     private readonly Stream _stream;
     private readonly MemoryStream _memorystream;
@@ -22,7 +23,7 @@ public class SshStreamWriter
     public Task Write(ResponseType responseType, CancellationToken cancellationToken = default)
         => Write((byte)responseType, cancellationToken);
 
-    public Task Write(FileAttributeFlags fileAttributeFlags, CancellationToken cancellationToken = default)
+    public Task Write(PFlags fileAttributeFlags, CancellationToken cancellationToken = default)
         => Write((uint)fileAttributeFlags, cancellationToken);
 
     public Task Write(Permissions permissions, CancellationToken cancellationToken = default)
@@ -41,31 +42,31 @@ public class SshStreamWriter
         }
     }
 
-    public async Task Write(Attributes attributes, FileAttributeFlags flags = FileAttributeFlags.DEFAULT, CancellationToken cancellationToken = default)
+    public async Task Write(SFTPAttributes attributes, PFlags flags = PFlags.DEFAULT, CancellationToken cancellationToken = default)
     {
         await Write(flags, cancellationToken).ConfigureAwait(false);
-        if (flags.HasFlag(FileAttributeFlags.SIZE))
+        if (flags.HasFlag(PFlags.SIZE))
         {
             await Write(attributes.FileSize, cancellationToken).ConfigureAwait(false);
         }
 
-        if (flags.HasFlag(FileAttributeFlags.UIDGUID))
+        if (flags.HasFlag(PFlags.UIDGUID))
         {
             await Write(attributes.Uid, cancellationToken).ConfigureAwait(false);
             await Write(attributes.Gid, cancellationToken).ConfigureAwait(false);
         }
-        if (flags.HasFlag(FileAttributeFlags.PERMISSIONS))
+        if (flags.HasFlag(PFlags.PERMISSIONS))
         {
             await Write(attributes.Permissions, cancellationToken).ConfigureAwait(false);
         }
 
-        if (flags.HasFlag(FileAttributeFlags.ACMODTIME))
+        if (flags.HasFlag(PFlags.ACMODTIME))
         {
             await Write(attributes.LastAccessedTime, cancellationToken).ConfigureAwait(false);
             await Write(attributes.LastModifiedTime, cancellationToken).ConfigureAwait(false);
         }
 
-        if (flags.HasFlag(FileAttributeFlags.EXTENDED))
+        if (flags.HasFlag(PFlags.EXTENDED))
         {
             await Write(attributes.ExtendeAttributes.Count, cancellationToken).ConfigureAwait(false);
             foreach (var a in attributes.ExtendeAttributes)
@@ -81,10 +82,10 @@ public class SshStreamWriter
 
     public async Task Write(FileSystemInfo fileInfo, CancellationToken cancellationToken = default)
     {
-        var fileattrs = new Attributes(fileInfo);
+        var fileattrs = new SFTPAttributes(fileInfo);
         await Write(fileInfo.Name, cancellationToken).ConfigureAwait(false);
         await Write(fileattrs.GetLongFileName(fileInfo.Name), cancellationToken).ConfigureAwait(false);
-        await Write(fileattrs, FileAttributeFlags.DEFAULT, cancellationToken).ConfigureAwait(false);
+        await Write(fileattrs, PFlags.DEFAULT, cancellationToken).ConfigureAwait(false);
     }
 
     public Task Write(byte value, CancellationToken cancellationToken = default)

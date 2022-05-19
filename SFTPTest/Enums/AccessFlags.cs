@@ -1,7 +1,7 @@
 ﻿namespace SFTPTest.Enums;
 
 [Flags]
-public enum AccessFlags : uint
+internal enum AccessFlags : uint
 {
     READ = 0x01,
     WRITE = 0x02,
@@ -12,7 +12,7 @@ public enum AccessFlags : uint
     TEXT = 0x40
 }
 
-public static class AccessFlagsExtensionMethods
+internal static class AccessFlagsExtensionMethods
 {
     public static FileMode ToFileMode(this AccessFlags flags)
     {

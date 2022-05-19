@@ -1,9 +1,9 @@
 ﻿using SFTPTest.Enums;
 using System.Globalization;
 
-namespace SFTPTest.Infrastructure;
+namespace SFTPTest.Models;
 
-public record Attributes(
+public record SFTPAttributes(
     ulong FileSize,
     uint Uid,
     uint Gid,
@@ -39,7 +39,7 @@ public record Attributes(
     private static string AttrStr(bool read, bool write, bool execute)
         => $"{(read ? "r" : "-")}{(write ? "w" : "-")}{(execute ? "x" : "-")}";
 
-    public Attributes(FileSystemInfo fsInfo)
+    public SFTPAttributes(FileSystemInfo fsInfo)
         : this(
               GetLength(fsInfo),
               _defaultowner,

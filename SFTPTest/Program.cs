@@ -20,7 +20,7 @@ public class Program
 
         var serviceCollection = new ServiceCollection();
         serviceCollection.AddLogging(c => c.ClearProviders().AddNLog());
-        serviceCollection.Configure<ServerOptions>(options => configuration.GetSection("Server").Bind(options));
+        serviceCollection.Configure<SFTPServerOptions>(options => configuration.GetSection("Server").Bind(options));
         var serviceprovider = serviceCollection.BuildServiceProvider();
 
         _logger = serviceprovider.GetRequiredService<ILogger<Program>>();
@@ -36,17 +36,17 @@ public class Program
         using var stdin = Console.OpenStandardInput();
         using var stdout = Console.OpenStandardOutput();
 
-        var server = new Server(
-            serviceprovider.GetRequiredService<IOptions<ServerOptions>>(),
-            serviceprovider.GetRequiredService<ILogger<Server>>(),
+        var options = serviceprovider.GetRequiredService<IOptions<SFTPServerOptions>>();
+        var server = new SFTPServer(
+            options,
+            serviceprovider.GetRequiredService<ILogger<SFTPServer>>(),
             stdin,
-            stdout
+            stdout,
+            new DefaultSFTPHandler()
         );
 
         using var cts = new CancellationTokenSource();
         await server.Run(cts.Token).ConfigureAwait(false);
         _logger.LogInformation("Server stopped...");
     }
-
-
 }
