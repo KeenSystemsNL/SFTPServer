@@ -1,6 +1,7 @@
 ﻿using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using NLog.Extensions.Logging;
 using System.Reflection;
 
@@ -19,7 +20,6 @@ public class Program
 
         var serviceCollection = new ServiceCollection();
         serviceCollection.AddLogging(c => c.ClearProviders().AddNLog());
-        serviceCollection.AddSingleton<IServer, Server>();
         serviceCollection.Configure<ServerOptions>(options => configuration.GetSection("Server").Bind(options));
         var serviceprovider = serviceCollection.BuildServiceProvider();
 
@@ -31,14 +31,22 @@ public class Program
             Environment.Exit(1);
         };
 
-        var server = serviceprovider.GetRequiredService<IServer>();
+
+        _logger.LogInformation("Starting server...");
         using var cts = new CancellationTokenSource();
         using var stdin = Console.OpenStandardInput();
         using var stdout = Console.OpenStandardOutput();
 
-        _logger.LogInformation("Starting server...");
-
-        await server.Run(stdin, stdout, cts.Token).ConfigureAwait(false);
+        var server = new Server(
+            serviceprovider.GetRequiredService<IOptions<ServerOptions>>(),
+            serviceprovider.GetRequiredService<ILogger<Server>>(),
+            stdin,
+            stdout,
+            cts.Token
+        );
+        await server.Run().ConfigureAwait(false);
         _logger.LogInformation("Server stopped...");
     }
+
+
 }

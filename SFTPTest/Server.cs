@@ -11,183 +11,190 @@ public class Server : IServer
 {
     private readonly ServerOptions _options;
     private readonly ILogger<Server> _logger;
+    private readonly CancellationToken _cancellationtoken;
+    private readonly SshStreamReader _reader;
+    private readonly SshStreamWriter _writer;
+    private readonly Dictionary<string, string> _filehandles = new();
+    private readonly Dictionary<string, Stream> _streamhandles = new();
+    private uint _protocolversion = 0;
 
-    private static readonly MessageHandlerCollection _messagehandlers = new()
-    {
-        //{ MessageType.INIT, InitHandler }, // Handled separately
-        { RequestType.REALPATH, RealPathHandler },
-        { RequestType.STAT, StatHandler },
-        { RequestType.LSTAT, LStatHandler },
-        { RequestType.FSTAT, FStatHandler },
-        { RequestType.SETSTAT, SetStatHandler },
-        { RequestType.FSETSTAT, FSetStatHandler },
-        { RequestType.OPENDIR, OpenDirHandler },
-        { RequestType.READDIR, ReadDirHandler },
-        { RequestType.CLOSE, CloseHandler },
-        { RequestType.OPEN, OpenHandler },
-        { RequestType.READ, ReadHandler },
-        { RequestType.WRITE, WriteHandler },
-        { RequestType.REMOVE, RemoveHandler },
-        { RequestType.RENAME, RenameHandler },
-        { RequestType.MKDIR, MakeDirHandler },
-        { RequestType.RMDIR, RemoveDirHandler },
-    };
+    private readonly Dictionary<RequestType, Func<uint, CancellationToken, Task>> _messagehandlers;
 
-    public Server(IOptions<ServerOptions> options, ILogger<Server> logger)
+    public Server(IOptions<ServerOptions> options, ILogger<Server> logger, Stream @in, Stream @out, CancellationToken cancellationToken = default)
     {
         _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+
+        _reader = new SshStreamReader(@in);
+        _writer = new SshStreamWriter(@out, _options.MaxMessageSize);
+        _cancellationtoken = cancellationToken;
+
+        _messagehandlers = new()
+        {
+            { RequestType.REALPATH, RealPathHandler },
+            { RequestType.STAT, StatHandler },
+            { RequestType.LSTAT, LStatHandler },
+            { RequestType.FSTAT, FStatHandler },
+            { RequestType.SETSTAT, SetStatHandler },
+            { RequestType.FSETSTAT, FSetStatHandler },
+            { RequestType.OPENDIR, OpenDirHandler },
+            { RequestType.READDIR, ReadDirHandler },
+            { RequestType.CLOSE, CloseHandler },
+            { RequestType.OPEN, OpenHandler },
+            { RequestType.READ, ReadHandler },
+            { RequestType.WRITE, WriteHandler },
+            { RequestType.REMOVE, RemoveHandler },
+            { RequestType.RENAME, RenameHandler },
+            { RequestType.MKDIR, MakeDirHandler },
+            { RequestType.RMDIR, RemoveDirHandler },
+        };
     }
 
-    public async Task Run(Stream @in, Stream @out, CancellationToken cancellationToken)
+    public async Task Run()
     {
-        var reader = new SshStreamReader(@in);
-        var writer = new SshStreamWriter(@out, _options.MaxMessageSize);
-        Session? session = null;
         uint msglength;
         do
         {
-            msglength = await reader.ReadUInt32(cancellationToken).ConfigureAwait(false);
+            msglength = await _reader.ReadUInt32(_cancellationtoken).ConfigureAwait(false);
             if (msglength > 0)
             {
                 // Determine message type
-                var msgtype = (RequestType)await reader.ReadByte(cancellationToken).ConfigureAwait(false);
-                if (session is null && msgtype is RequestType.INIT)
+                var msgtype = (RequestType)await _reader.ReadByte(_cancellationtoken).ConfigureAwait(false);
+                if (_protocolversion == 0 && msgtype is RequestType.INIT)
                 {
-                    session = await InitHandler(reader, writer, cancellationToken).ConfigureAwait(false);
+                    await InitHandler(_cancellationtoken).ConfigureAwait(false);
                 }
-                else if (session is not null)
+                else if (_protocolversion > 0)
                 {
                     // Get requestid
-                    var requestid = await reader.ReadUInt32(cancellationToken).ConfigureAwait(false);
+                    var requestid = await _reader.ReadUInt32(_cancellationtoken).ConfigureAwait(false);
                     _logger.LogInformation("{msgtype} [ID: {requestid} LEN: {msglength}]", msgtype, requestid, msglength);
 
                     // Get handler and handle the message when supported
                     if (_messagehandlers.TryGetValue(msgtype, out var handler))
                     {
-                        await handler(session, requestid, cancellationToken).ConfigureAwait(false);
+                        await handler(requestid, _cancellationtoken).ConfigureAwait(false);
                     }
                     else
                     {
-                        await SendStatus(session, requestid, Status.OP_UNSUPPORTED, cancellationToken).ConfigureAwait(false);
+                        await SendStatus(requestid, Status.OP_UNSUPPORTED, _cancellationtoken).ConfigureAwait(false);
                     }
                 }
 
                 // Write response
-                await writer.Flush(cancellationToken).ConfigureAwait(false);
+                await _writer.Flush(_cancellationtoken).ConfigureAwait(false);
             }
-        } while (!cancellationToken.IsCancellationRequested && msglength > 0);
+        } while (!_cancellationtoken.IsCancellationRequested && msglength > 0);
     }
 
-    private async Task<Session> InitHandler(SshStreamReader reader, SshStreamWriter writer, CancellationToken cancellationToken = default)
+    private async Task InitHandler(CancellationToken cancellationToken = default)
     {
         // Get client version
-        var clientversion = await reader.ReadUInt32(cancellationToken).ConfigureAwait(false);
-        var version = Math.Min(clientversion, 3);
+        var clientversion = await _reader.ReadUInt32(cancellationToken).ConfigureAwait(false);
+        _protocolversion = Math.Min(clientversion, 3);
 
-        _logger.LogInformation("CLIENT version {clientversion}, sending version {serverversion}", clientversion, version);
+        _logger.LogInformation("CLIENT version {clientversion}, sending version {serverversion}", clientversion, _protocolversion);
 
         // Send version response
-        await writer.Write(RequestType.VERSION, cancellationToken).ConfigureAwait(false);
-        await writer.Write(version, cancellationToken).ConfigureAwait(false);
-        return new Session(reader, writer, new FileHandleCollection(), new FileStreamCollection(), version, _options.Root);
+        await _writer.Write(RequestType.VERSION, cancellationToken).ConfigureAwait(false);
+        await _writer.Write(_protocolversion, cancellationToken).ConfigureAwait(false);
     }
 
-    private static async Task RealPathHandler(Session session, uint requestid, CancellationToken cancellationToken = default)
+    private async Task RealPathHandler(uint requestid, CancellationToken cancellationToken = default)
     {
-        var path = await session.Reader.ReadString(cancellationToken).ConfigureAwait(false);
+        var path = await _reader.ReadString(cancellationToken).ConfigureAwait(false);
         if (path == ".")
         {
             path = "/";
         }
 
-        await session.Writer.Write(ResponseType.NAME, cancellationToken).ConfigureAwait(false);
-        await session.Writer.Write(requestid, cancellationToken).ConfigureAwait(false);
-        await session.Writer.Write(new[] { new VirtualPath(path) }, cancellationToken).ConfigureAwait(false);
+        await _writer.Write(ResponseType.NAME, cancellationToken).ConfigureAwait(false);
+        await _writer.Write(requestid, cancellationToken).ConfigureAwait(false);
+        await _writer.Write(new[] { new VirtualPath(path) }, cancellationToken).ConfigureAwait(false);
     }
 
-    private static Task StatHandler(Session session, uint requestid, CancellationToken cancellationToken = default)
-        => LStatHandler(session, requestid, cancellationToken);
+    private Task StatHandler(uint requestid, CancellationToken cancellationToken = default)
+        => LStatHandler(requestid, cancellationToken);
 
-    private static async Task LStatHandler(Session session, uint requestid, CancellationToken cancellationToken = default)
+    private async Task LStatHandler(uint requestid, CancellationToken cancellationToken = default)
     {
-        var path = GetPath(session, await session.Reader.ReadString(cancellationToken).ConfigureAwait(false));
+        var path = GetPath(await _reader.ReadString(cancellationToken).ConfigureAwait(false));
 
-        await SendStat(session, requestid, path, cancellationToken).ConfigureAwait(false);
+        await SendStat(requestid, path, cancellationToken).ConfigureAwait(false);
     }
 
-    private static async Task FStatHandler(Session session, uint requestid, CancellationToken cancellationToken = default)
+    private async Task FStatHandler(uint requestid, CancellationToken cancellationToken = default)
     {
-        var handle = await session.Reader.ReadString(cancellationToken).ConfigureAwait(false);
+        var handle = await _reader.ReadString(cancellationToken).ConfigureAwait(false);
 
-        if (session.FileHandles.TryGetValue(handle, out var path))
+        if (_filehandles.TryGetValue(handle, out var path))
         {
-            await SendStat(session, requestid, path, cancellationToken).ConfigureAwait(false);
+            await SendStat(requestid, path, cancellationToken).ConfigureAwait(false);
         }
         else
         {
-            await SendInvalidHandle(session, requestid, cancellationToken).ConfigureAwait(false);
+            await SendInvalidHandle(requestid, cancellationToken).ConfigureAwait(false);
         }
     }
 
-    private static Task SendInvalidHandle(Session session, uint requestid, CancellationToken cancellationToken = default)
-        => SendStatus(session, requestid, Status.NO_SUCH_FILE, cancellationToken);
+    private Task SendInvalidHandle(uint requestid, CancellationToken cancellationToken = default)
+        => SendStatus(requestid, Status.NO_SUCH_FILE, cancellationToken);
 
-    private static async Task SetStatHandler(Session session, uint requestid, CancellationToken cancellationToken = default)
+    private async Task SetStatHandler(uint requestid, CancellationToken cancellationToken = default)
     {
-        var path = GetPath(session, await session.Reader.ReadString(cancellationToken).ConfigureAwait(false));
-        var attrs = await session.Reader.ReadAttributes(cancellationToken).ConfigureAwait(false);
+        var path = GetPath(await _reader.ReadString(cancellationToken).ConfigureAwait(false));
+        var attrs = await _reader.ReadAttributes(cancellationToken).ConfigureAwait(false);
 
-        await DoStat(session, requestid, path, attrs, cancellationToken).ConfigureAwait(false);
-        await SendStatus(session, requestid, Status.OK, cancellationToken).ConfigureAwait(false);
+        await DoStat(requestid, path, attrs, cancellationToken).ConfigureAwait(false);
+        await SendStatus(requestid, Status.OK, cancellationToken).ConfigureAwait(false);
     }
 
-    private static async Task FSetStatHandler(Session session, uint requestid, CancellationToken cancellationToken = default)
+    private async Task FSetStatHandler(uint requestid, CancellationToken cancellationToken = default)
     {
-        var handle = await session.Reader.ReadString(cancellationToken).ConfigureAwait(false);
-        var attrs = await session.Reader.ReadAttributes(cancellationToken).ConfigureAwait(false);
+        var handle = await _reader.ReadString(cancellationToken).ConfigureAwait(false);
+        var attrs = await _reader.ReadAttributes(cancellationToken).ConfigureAwait(false);
 
-        if (session.FileHandles.TryGetValue(handle, out var path))
+        if (_filehandles.TryGetValue(handle, out var path))
         {
-            await DoStat(session, requestid, path, attrs, cancellationToken).ConfigureAwait(false);
-            await SendStatus(session, requestid, Status.OK, cancellationToken).ConfigureAwait(false);
+            await DoStat(requestid, path, attrs, cancellationToken).ConfigureAwait(false);
+            await SendStatus(requestid, Status.OK, cancellationToken).ConfigureAwait(false);
         }
         else
         {
-            await SendInvalidHandle(session, requestid, cancellationToken).ConfigureAwait(false);
+            await SendInvalidHandle(requestid, cancellationToken).ConfigureAwait(false);
         }
     }
 
-    private static async Task OpenDirHandler(Session session, uint requestid, CancellationToken cancellationToken = default)
+    private async Task OpenDirHandler(uint requestid, CancellationToken cancellationToken = default)
     {
-        var path = GetPath(session, await session.Reader.ReadString(cancellationToken).ConfigureAwait(false));
+        var path = GetPath(await _reader.ReadString(cancellationToken).ConfigureAwait(false));
 
         var handle = GetHandle();
-        session.FileHandles.Add(handle, path);
+        _filehandles.Add(handle, path);
 
-        await SendHandle(session, requestid, handle, cancellationToken).ConfigureAwait(false);
+        await SendHandle(requestid, handle, cancellationToken).ConfigureAwait(false);
     }
 
-    private static async Task OpenHandler(Session session, uint requestid, CancellationToken cancellationToken = default)
+    private async Task OpenHandler(uint requestid, CancellationToken cancellationToken = default)
     {
-        var filename = await session.Reader.ReadString(cancellationToken).ConfigureAwait(false);
-        var flags = await session.Reader.ReadAccessFlags(cancellationToken).ConfigureAwait(false);
-        var attrs = await session.Reader.ReadAttributes(cancellationToken).ConfigureAwait(false);
+        var filename = await _reader.ReadString(cancellationToken).ConfigureAwait(false);
+        var flags = await _reader.ReadAccessFlags(cancellationToken).ConfigureAwait(false);
+        var attrs = await _reader.ReadAttributes(cancellationToken).ConfigureAwait(false);
 
         var handle = GetHandle();
-        session.FileStreams.Add(handle, File.Open(GetPath(session, filename), flags.ToFileMode(), flags.ToFileAccess(), FileShare.ReadWrite));
-        session.FileHandles.Add(handle, GetPath(session, filename));
+        _streamhandles.Add(handle, File.Open(GetPath(filename), flags.ToFileMode(), flags.ToFileAccess(), FileShare.ReadWrite));
+        _filehandles.Add(handle, GetPath(filename));
 
-        await SendHandle(session, requestid, handle, cancellationToken).ConfigureAwait(false);
+        await SendHandle(requestid, handle, cancellationToken).ConfigureAwait(false);
     }
 
-    private static async Task ReadHandler(Session session, uint requestid, CancellationToken cancellationToken = default)
+    private async Task ReadHandler(uint requestid, CancellationToken cancellationToken = default)
     {
-        var handle = await session.Reader.ReadString(cancellationToken).ConfigureAwait(false);
-        var offset = await session.Reader.ReadUInt64(cancellationToken).ConfigureAwait(false);
-        var len = await session.Reader.ReadUInt32(cancellationToken).ConfigureAwait(false);
+        var handle = await _reader.ReadString(cancellationToken).ConfigureAwait(false);
+        var offset = await _reader.ReadUInt64(cancellationToken).ConfigureAwait(false);
+        var len = await _reader.ReadUInt32(cancellationToken).ConfigureAwait(false);
 
-        if (session.FileStreams.TryGetValue(handle, out var stream))
+        if (_streamhandles.TryGetValue(handle, out var stream))
         {
             if (offset < (ulong)stream.Length)
             {
@@ -195,140 +202,140 @@ public class Server : IServer
                 var buff = new byte[len];
                 var bytesread = await stream.ReadAsync(buff.AsMemory(0, (int)len), cancellationToken).ConfigureAwait(false);
 
-                await session.Writer.Write(ResponseType.DATA, cancellationToken).ConfigureAwait(false);
-                await session.Writer.Write(requestid, cancellationToken).ConfigureAwait(false);
-                await session.Writer.Write(bytesread, cancellationToken).ConfigureAwait(false);
-                await session.Writer.Write(buff[..bytesread], cancellationToken).ConfigureAwait(false);
+                await _writer.Write(ResponseType.DATA, cancellationToken).ConfigureAwait(false);
+                await _writer.Write(requestid, cancellationToken).ConfigureAwait(false);
+                await _writer.Write(bytesread, cancellationToken).ConfigureAwait(false);
+                await _writer.Write(buff[..bytesread], cancellationToken).ConfigureAwait(false);
             }
             else
             {
-                await SendStatus(session, requestid, Status.EOF, cancellationToken).ConfigureAwait(false);
+                await SendStatus(requestid, Status.EOF, cancellationToken).ConfigureAwait(false);
             }
         }
         else
         {
-            await SendInvalidHandle(session, requestid, cancellationToken).ConfigureAwait(false);
+            await SendInvalidHandle(requestid, cancellationToken).ConfigureAwait(false);
         }
     }
 
-    private static async Task WriteHandler(Session session, uint requestid, CancellationToken cancellationToken = default)
+    private async Task WriteHandler(uint requestid, CancellationToken cancellationToken = default)
     {
-        var handle = await session.Reader.ReadString(cancellationToken).ConfigureAwait(false);
-        var offset = (long)await session.Reader.ReadUInt64(cancellationToken).ConfigureAwait(false);
-        var data = await session.Reader.ReadBinary(cancellationToken).ConfigureAwait(false);
+        var handle = await _reader.ReadString(cancellationToken).ConfigureAwait(false);
+        var offset = (long)await _reader.ReadUInt64(cancellationToken).ConfigureAwait(false);
+        var data = await _reader.ReadBinary(cancellationToken).ConfigureAwait(false);
 
-        if (session.FileStreams.TryGetValue(handle, out var stream))
+        if (_streamhandles.TryGetValue(handle, out var stream))
         {
             if (stream.Position != offset)
             {
                 stream.Seek(offset, SeekOrigin.Begin);
             }
             await stream.WriteAsync(data, cancellationToken).ConfigureAwait(false);
-            await SendStatus(session, requestid, Status.OK, cancellationToken).ConfigureAwait(false);
+            await SendStatus(requestid, Status.OK, cancellationToken).ConfigureAwait(false);
         }
         else
         {
-            await SendInvalidHandle(session, requestid, cancellationToken).ConfigureAwait(false);
+            await SendInvalidHandle(requestid, cancellationToken).ConfigureAwait(false);
         }
     }
 
-    private static async Task ReadDirHandler(Session session, uint requestid, CancellationToken cancellationToken = default)
+    private async Task ReadDirHandler(uint requestid, CancellationToken cancellationToken = default)
     {
-        var handle = await session.Reader.ReadString(cancellationToken).ConfigureAwait(false);
+        var handle = await _reader.ReadString(cancellationToken).ConfigureAwait(false);
 
-        if (session.FileHandles.TryGetValue(handle, out var path))
+        if (_filehandles.TryGetValue(handle, out var path))
         {
-            await session.Writer.Write(ResponseType.NAME, cancellationToken).ConfigureAwait(false);
-            await session.Writer.Write(requestid, cancellationToken).ConfigureAwait(false);
-            await session.Writer.Write(new DirectoryInfo(path).GetFileSystemInfos().OrderBy(f => f.Name).ToArray(), cancellationToken).ConfigureAwait(false);
+            await _writer.Write(ResponseType.NAME, cancellationToken).ConfigureAwait(false);
+            await _writer.Write(requestid, cancellationToken).ConfigureAwait(false);
+            await _writer.Write(new DirectoryInfo(path).GetFileSystemInfos().OrderBy(f => f.Name).ToArray(), cancellationToken).ConfigureAwait(false);
 
-            session.FileHandles.Remove(handle);
+            _filehandles.Remove(handle);
         }
         else
         {
-            await SendStatus(session, requestid, Status.EOF, cancellationToken).ConfigureAwait(false);
+            await SendStatus(requestid, Status.EOF, cancellationToken).ConfigureAwait(false);
         }
     }
 
-    private static async Task CloseHandler(Session session, uint requestId, CancellationToken cancellationToken = default)
+    private async Task CloseHandler(uint requestId, CancellationToken cancellationToken = default)
     {
-        var handle = await session.Reader.ReadString(cancellationToken).ConfigureAwait(false);
+        var handle = await _reader.ReadString(cancellationToken).ConfigureAwait(false);
 
-        session.FileHandles.Remove(handle);
+        _filehandles.Remove(handle);
 
-        if (session.FileStreams.TryGetValue(handle, out var stream))
+        if (_streamhandles.TryGetValue(handle, out var stream))
         {
             stream.Close();
             stream.Dispose();
         }
-        session.FileStreams.Remove(handle);
+        _streamhandles.Remove(handle);
 
-        await SendStatus(session, requestId, Status.OK, cancellationToken).ConfigureAwait(false);
+        await SendStatus(requestId, Status.OK, cancellationToken).ConfigureAwait(false);
     }
 
-    private static async Task RemoveHandler(Session session, uint requestid, CancellationToken cancellationToken = default)
+    private async Task RemoveHandler(uint requestid, CancellationToken cancellationToken = default)
     {
-        var filename = GetPath(session, await session.Reader.ReadString(cancellationToken).ConfigureAwait(false));
+        var filename = GetPath(await _reader.ReadString(cancellationToken).ConfigureAwait(false));
 
         if (TryGetFSObject(filename, out var fsObject) && fsObject is FileInfo)
         {
             File.Delete(fsObject.FullName);
-            await SendStatus(session, requestid, Status.OK, cancellationToken).ConfigureAwait(false);
+            await SendStatus(requestid, Status.OK, cancellationToken).ConfigureAwait(false);
         }
         else
         {
-            await SendStatus(session, requestid, Status.FAILURE, cancellationToken).ConfigureAwait(false);  // TODO: Return (more) correct status like NO_SUCH_FILE or PERMISSION_DENIED etc.
+            await SendStatus(requestid, Status.FAILURE, cancellationToken).ConfigureAwait(false);  // TODO: Return (more) correct status like NO_SUCH_FILE or PERMISSION_DENIED etc.
         }
     }
 
-    private static async Task RenameHandler(Session session, uint requestid, CancellationToken cancellationToken = default)
+    private async Task RenameHandler(uint requestid, CancellationToken cancellationToken = default)
     {
-        var oldfilename = GetPath(session, await session.Reader.ReadString(cancellationToken).ConfigureAwait(false));
-        var newfilename = GetPath(session, await session.Reader.ReadString(cancellationToken).ConfigureAwait(false));
+        var oldfilename = GetPath(await _reader.ReadString(cancellationToken).ConfigureAwait(false));
+        var newfilename = GetPath(await _reader.ReadString(cancellationToken).ConfigureAwait(false));
 
         if (TryGetFSObject(oldfilename, out var fsOldObject) && fsOldObject is FileInfo)
         {
             File.Move(fsOldObject.FullName, newfilename);
-            await SendStatus(session, requestid, Status.OK, cancellationToken).ConfigureAwait(false);
+            await SendStatus(requestid, Status.OK, cancellationToken).ConfigureAwait(false);
         }
         else
         {
-            await SendStatus(session, requestid, Status.FAILURE, cancellationToken).ConfigureAwait(false);  // TODO: Return (more) correct status like NO_SUCH_FILE or PERMISSION_DENIED etc.
+            await SendStatus(requestid, Status.FAILURE, cancellationToken).ConfigureAwait(false);  // TODO: Return (more) correct status like NO_SUCH_FILE or PERMISSION_DENIED etc.
         }
     }
 
-    private static async Task MakeDirHandler(Session session, uint requestid, CancellationToken cancellationToken = default)
+    private async Task MakeDirHandler(uint requestid, CancellationToken cancellationToken = default)
     {
-        var name = GetPath(session, await session.Reader.ReadString(cancellationToken).ConfigureAwait(false));
-        var attrs = session.Reader.ReadAttributes(cancellationToken);
+        var name = GetPath(await _reader.ReadString(cancellationToken).ConfigureAwait(false));
+        var attrs = _reader.ReadAttributes(cancellationToken);
 
         if (!TryGetFSObject(name, out var fsObject))
         {
             Directory.CreateDirectory(name);
-            await SendStatus(session, requestid, Status.OK, cancellationToken).ConfigureAwait(false);
+            await SendStatus(requestid, Status.OK, cancellationToken).ConfigureAwait(false);
         }
         else
         {
-            await SendStatus(session, requestid, Status.FAILURE, cancellationToken).ConfigureAwait(false);  // TODO: Return (more) correct status like NO_SUCH_FILE or PERMISSION_DENIED etc.
+            await SendStatus(requestid, Status.FAILURE, cancellationToken).ConfigureAwait(false);  // TODO: Return (more) correct status like NO_SUCH_FILE or PERMISSION_DENIED etc.
         }
     }
 
-    private static async Task RemoveDirHandler(Session session, uint requestid, CancellationToken cancellationToken = default)
+    private async Task RemoveDirHandler(uint requestid, CancellationToken cancellationToken = default)
     {
-        var name = GetPath(session, await session.Reader.ReadString(cancellationToken).ConfigureAwait(false));
+        var name = GetPath(await _reader.ReadString(cancellationToken).ConfigureAwait(false));
         if (TryGetFSObject(name, out var fsObject) && fsObject is DirectoryInfo)
         {
             Directory.Delete(name);
-            await SendStatus(session, requestid, Status.OK, cancellationToken).ConfigureAwait(false);
+            await SendStatus(requestid, Status.OK, cancellationToken).ConfigureAwait(false);
         }
         else
         {
-            await SendStatus(session, requestid, Status.FAILURE, cancellationToken).ConfigureAwait(false);  // TODO: Return (more) correct status like NO_SUCH_FILE or PERMISSION_DENIED etc.
+            await SendStatus(requestid, Status.FAILURE, cancellationToken).ConfigureAwait(false);  // TODO: Return (more) correct status like NO_SUCH_FILE or PERMISSION_DENIED etc.
         }
     }
 
 
-    private static Task DoStat(Session session, uint requestid, string path, Attributes attributes, CancellationToken cancellationToken = default)
+    private static Task DoStat(uint requestid, string path, Attributes attributes, CancellationToken cancellationToken = default)
     {
         if (attributes.LastModifiedTime != DateTimeOffset.MinValue)
         {
@@ -339,37 +346,37 @@ public class Server : IServer
         return Task.CompletedTask;
     }
 
-    private static async Task SendHandle(Session session, uint requestId, string handle, CancellationToken cancellationToken = default)
+    private async Task SendHandle(uint requestId, string handle, CancellationToken cancellationToken = default)
     {
-        await session.Writer.Write(ResponseType.HANDLE, cancellationToken).ConfigureAwait(false);
-        await session.Writer.Write(requestId, cancellationToken).ConfigureAwait(false);
-        await session.Writer.Write(handle, cancellationToken).ConfigureAwait(false);
+        await _writer.Write(ResponseType.HANDLE, cancellationToken).ConfigureAwait(false);
+        await _writer.Write(requestId, cancellationToken).ConfigureAwait(false);
+        await _writer.Write(handle, cancellationToken).ConfigureAwait(false);
     }
 
-    private static async Task SendStat(Session session, uint requestid, string path, CancellationToken cancellationToken = default)
+    private async Task SendStat(uint requestid, string path, CancellationToken cancellationToken = default)
     {
         if (TryGetFSObject(path, out var fso))
         {
-            await session.Writer.Write(ResponseType.ATTRS, cancellationToken).ConfigureAwait(false);
-            await session.Writer.Write(requestid, cancellationToken).ConfigureAwait(false);
-            await session.Writer.Write(new Attributes(fso), FileAttributeFlags.DEFAULT, cancellationToken).ConfigureAwait(false);
+            await _writer.Write(ResponseType.ATTRS, cancellationToken).ConfigureAwait(false);
+            await _writer.Write(requestid, cancellationToken).ConfigureAwait(false);
+            await _writer.Write(new Attributes(fso), FileAttributeFlags.DEFAULT, cancellationToken).ConfigureAwait(false);
         }
         else
         {
-            await SendStatus(session, requestid, Status.NO_SUCH_FILE, cancellationToken).ConfigureAwait(false);
+            await SendStatus(requestid, Status.NO_SUCH_FILE, cancellationToken).ConfigureAwait(false);
         }
     }
 
-    private static Task SendStatus(Session session, uint requestId, Status status, CancellationToken cancellationToken = default)
-        => SendStatus(session, requestId, status, GetStatusString(status), string.Empty, cancellationToken);
+    private Task SendStatus(uint requestId, Status status, CancellationToken cancellationToken = default)
+        => SendStatus(requestId, status, GetStatusString(status), string.Empty, cancellationToken);
 
-    private static async Task SendStatus(Session session, uint requestId, Status status, string errorMessage, string languageTag, CancellationToken cancellationToken = default)
+    private async Task SendStatus(uint requestId, Status status, string errorMessage, string languageTag, CancellationToken cancellationToken = default)
     {
-        await session.Writer.Write(ResponseType.STATUS, cancellationToken).ConfigureAwait(false);
-        await session.Writer.Write(requestId, cancellationToken).ConfigureAwait(false);
-        await session.Writer.Write(status, cancellationToken).ConfigureAwait(false);
-        await session.Writer.Write(errorMessage, cancellationToken).ConfigureAwait(false);
-        await session.Writer.Write(languageTag, cancellationToken).ConfigureAwait(false);
+        await _writer.Write(ResponseType.STATUS, cancellationToken).ConfigureAwait(false);
+        await _writer.Write(requestId, cancellationToken).ConfigureAwait(false);
+        await _writer.Write(status, cancellationToken).ConfigureAwait(false);
+        await _writer.Write(errorMessage, cancellationToken).ConfigureAwait(false);
+        await _writer.Write(languageTag, cancellationToken).ConfigureAwait(false);
     }
 
     private static string GetStatusString(Status status)
@@ -406,9 +413,9 @@ public class Server : IServer
     private static string GetHandle()
         => Guid.NewGuid().ToString("N");
 
-    private static string GetPath(Session session, string path)
+    private string GetPath(string path)
     {
-        var result = Path.GetFullPath(Path.Combine(session.Root, path.TrimStart('/'))).Replace('/', '\\');
-        return result.StartsWith(session.Root) ? result : session.Root;
+        var result = Path.GetFullPath(Path.Combine(_options.Root, path.TrimStart('/'))).Replace('/', '\\');
+        return result.StartsWith(_options.Root) ? result : _options.Root;
     }
 }
