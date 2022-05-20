@@ -26,7 +26,7 @@ Implementing an `ISFTPHandler` should be pretty straightforward, simply implemen
 
 * The [`SymLink`](https://datatracker.ietf.org/doc/html/draft-ietf-secsh-filexfer-02#section-6.10) command has been implemented with the `linkpath` and `targetpath` swapped; I may or may not interpret the RFC incorrectly or the clients which were used to test the `SymLink` command (WinSCP, Cyberduck and the 'native' sftp commandline executable) had the arguments swapped.
 
-* The `DefaultSFTPHandler` **DOES NOT** take particular much care of path canonicalization or mitigations agains path traversion. When used in an untrusted environment extra care should be taken to ensure safety.
+* The `DefaultSFTPHandler` **DOES NOT** take particular much care of path canonicalization or mitigations against path traversion. When used in an untrusted environment extra care should be taken to ensure safety.
 
 * The `DefaultSFTPHandler` **DOES NOT** make a noteworthy effort to return correct POSIX file permissions, nor does it support setting permissions.
 
