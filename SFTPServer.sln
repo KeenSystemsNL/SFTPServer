@@ -5,7 +5,12 @@ VisualStudioVersion = 17.1.32407.343
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SFTPServer", "SFTPServer\SFTPServer.csproj", "{6FA52C81-2423-44C3-B031-A512F5086934}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SFTPHost", "SFTPHost\SFTPHost.csproj", "{C999AD68-70E5-4AE0-8608-85ACE3D6EDAF}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SFTPHost", "SFTPHost\SFTPHost.csproj", "{C999AD68-70E5-4AE0-8608-85ACE3D6EDAF}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{DEF58B15-0E8C-4B9E-90BD-3FE2D7821FBE}"
+	ProjectSection(SolutionItems) = preProject
+		README.md = README.md
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
