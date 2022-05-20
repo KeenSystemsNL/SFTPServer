@@ -1,6 +1,6 @@
 # SFTPServer
 
-This library (and simple host) implement an SFTP server that implements the [V3 version of the SFTP protocol](https://datatracker.ietf.org/doc/html/draft-ietf-secsh-filexfer-02).
+This library (and simple host) implement an SFTP server that implements the [V3 version of the SFTP protocol](https://datatracker.ietf.org/doc/html/draft-ietf-secsh-filexfer-02) and is available as [NuGet package](https://www.nuget.org/packages/SFTPServer/).
 
 This library is intended to be hosted in an SSH deamon; this can be done by editting the `sshd_config` file (usually in `/etc/ssh/` or, for Windows, in `%PROGRAMDATA%\ssh`) and pointing it to your own host executable.
 
