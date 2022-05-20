@@ -2,8 +2,8 @@
 
 namespace SFTPTest.Models;
 
-public record SFTPNames(IEnumerable<FileSystemInfo> Names)
+public record SFTPNames(IEnumerable<SFTPName> Names)
 {
     public Status Status { get; init; } = Status.OK;
-    public static readonly SFTPNames EOF = new(Array.Empty<FileSystemInfo>()) { Status = Status.EOF };
+    public static readonly SFTPNames EOF = new(Array.Empty<SFTPName>()) { Status = Status.EOF };
 }

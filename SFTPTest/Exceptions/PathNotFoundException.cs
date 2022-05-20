@@ -1,9 +1,11 @@
-﻿namespace SFTPTest.Exceptions;
+﻿using SFTPTest.Models;
+
+namespace SFTPTest.Exceptions;
 
 public class PathNotFoundException : NotFoundException
 {
-    public string Path { get; init; }
+    public SFTPPath Path { get; init; }
 
-    public PathNotFoundException(string path)
+    public PathNotFoundException(SFTPPath path)
         => Path = path;
 }

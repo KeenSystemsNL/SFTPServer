@@ -6,16 +6,24 @@ namespace SFTPTest;
 
 public class DefaultSFTPHandler : ISFTPHandler
 {
-    private readonly Dictionary<string, string> _filehandles = new();
-    private readonly Dictionary<string, Stream> _streamhandles = new();
+    private readonly Dictionary<SFTPHandle, SFTPPath> _filehandles = new();
+    private readonly Dictionary<SFTPHandle, Stream> _streamhandles = new();
 
-    public string GetPath(string root, string path)
+    public SFTPPath GetPath(SFTPPath root, SFTPPath path)
     {
-        var result = Path.GetFullPath(Path.Combine(root, path.TrimStart('/'))).Replace('/', '\\');
-        return result.StartsWith(root) ? result : root;
+        var result = Path.GetFullPath(Path.Combine(root.Path, path.Path.TrimStart('/'))).Replace('/', '\\');
+        return new SFTPPath(result.StartsWith(root.Path) ? result : root.Path);
     }
 
-    public Task Close(string handle, CancellationToken cancellationToken = default)
+    public Task<SFTPHandle> Open(SFTPPath path, FileMode fileMode, FileAccess fileAccess, SFTPAttributes attributes, CancellationToken cancellationToken = default)
+    {
+        var handle = GetHandle();
+        _streamhandles.Add(handle, File.Open(path.Path, fileMode, fileAccess, FileShare.ReadWrite));
+        _filehandles.Add(handle, path);
+        return Task.FromResult(handle);
+    }
+
+    public Task Close(SFTPHandle handle, CancellationToken cancellationToken = default)
     {
         _filehandles.Remove(handle);
 
@@ -28,55 +36,7 @@ public class DefaultSFTPHandler : ISFTPHandler
         return Task.CompletedTask;
     }
 
-    public Task FSetStat(string handle, SFTPAttributes attributes, CancellationToken cancellationToken = default)
-    {
-        if (_filehandles.TryGetValue(handle, out var path))
-        {
-            return SetStat(path, attributes, cancellationToken);
-        }
-        throw new HandleNotFoundException(handle);
-    }
-
-    public Task<SFTPAttributes> FStat(string handle, CancellationToken cancellationToken = default)
-    {
-        if (_filehandles.TryGetValue(handle, out var path))
-        {
-            return Stat(path, cancellationToken);
-        }
-        throw new HandleNotFoundException(handle);
-    }
-
-    public Task<SFTPAttributes> LStat(string path, CancellationToken cancellationToken = default)
-    {
-        if (TryGetFSObject(path, out var fso))
-        {
-            return Task.FromResult(new SFTPAttributes(fso));
-        }
-        throw new PathNotFoundException(path);
-    }
-
-    public Task MakeDir(string path, SFTPAttributes attributes, CancellationToken cancellationToken = default)
-    {
-        Directory.CreateDirectory(path);
-        return Task.CompletedTask;
-    }
-
-    public Task<string> Open(string filename, FileMode fileMode, FileAccess fileAccess, SFTPAttributes attributes, CancellationToken cancellationToken = default)
-    {
-        var handle = GetHandle();
-        _streamhandles.Add(handle, File.Open(filename, fileMode, fileAccess, FileShare.ReadWrite));
-        _filehandles.Add(handle, filename);
-        return Task.FromResult(handle);
-    }
-
-    public Task<string> OpenDir(string path, CancellationToken cancellationToken = default)
-    {
-        var handle = GetHandle();
-        _filehandles.Add(handle, path);
-        return Task.FromResult(handle);
-    }
-
-    public async Task<SFTPData> Read(string handle, ulong offset, uint length, CancellationToken cancellationToken = default)
+    public async Task<SFTPData> Read(SFTPHandle handle, ulong offset, uint length, CancellationToken cancellationToken = default)
     {
         if (_streamhandles.TryGetValue(handle, out var stream))
         {
@@ -96,56 +56,7 @@ public class DefaultSFTPHandler : ISFTPHandler
         throw new HandleNotFoundException(handle);
     }
 
-    public Task<SFTPNames> ReadDir(string handle, CancellationToken cancellationToken = default)
-    {
-        if (_filehandles.TryGetValue(handle, out var path))
-        {
-            _filehandles.Remove(handle);
-            return Task.FromResult(new SFTPNames(new DirectoryInfo(path).GetFileSystemInfos().OrderBy(f => f.Name)));
-        }
-        return Task.FromResult(SFTPNames.EOF);
-    }
-
-    public Task<string> RealPath(string path, CancellationToken cancellationToken = default)
-        => Task.FromResult(path);
-
-    public Task Remove(string path, CancellationToken cancellationToken = default)
-    {
-        if (TryGetFSObject(path, out var fsObject) && fsObject is FileInfo)
-        {
-            File.Delete(fsObject.FullName);
-            return Task.CompletedTask;
-        }
-        throw new PathNotFoundException(path);
-    }
-
-    public Task RemoveDir(string path, CancellationToken cancellationToken = default)
-    {
-        if (TryGetFSObject(path, out var fsObject) && fsObject is DirectoryInfo)
-        {
-            Directory.Delete(path);
-            return Task.CompletedTask;
-        }
-        throw new PathNotFoundException(path);
-    }
-
-    public Task Rename(string oldpath, string newpath, CancellationToken cancellationToken = default)
-    {
-        if (TryGetFSObject(oldpath, out var fsOldObject) && fsOldObject is FileInfo)
-        {
-            File.Move(fsOldObject.FullName, newpath);
-            return Task.CompletedTask;
-        }
-        throw new PathNotFoundException(oldpath);
-    }
-
-    public Task SetStat(string path, SFTPAttributes attributes, CancellationToken cancellationToken = default)
-        => DoStat(path, attributes, cancellationToken);
-
-    public Task<SFTPAttributes> Stat(string path, CancellationToken cancellationToken = default)
-        => LStat(path, cancellationToken);
-
-    public async Task Write(string handle, ulong offset, byte[] data, CancellationToken cancellationToken = default)
+    public async Task Write(SFTPHandle handle, ulong offset, byte[] data, CancellationToken cancellationToken = default)
     {
         if (_streamhandles.TryGetValue(handle, out var stream))
         {
@@ -159,32 +70,136 @@ public class DefaultSFTPHandler : ISFTPHandler
         throw new HandleNotFoundException(handle);
     }
 
-    private static Task DoStat(string path, SFTPAttributes attributes, CancellationToken cancellationToken = default)
+    public Task<SFTPAttributes> LStat(SFTPPath path, CancellationToken cancellationToken = default)
     {
-        if (attributes.LastModifiedTime != DateTimeOffset.MinValue)
+        if (TryGetFSObject(path, out var fso))
         {
-            File.SetLastWriteTimeUtc(path, attributes.LastModifiedTime.UtcDateTime);
+            return Task.FromResult(SFTPAttributes.FromFileSystemInfo(fso));
         }
-        //TODO: implement permissions??
+        throw new PathNotFoundException(path);
+    }
+
+    public Task<SFTPAttributes> FStat(SFTPHandle handle, CancellationToken cancellationToken = default)
+    {
+        if (_filehandles.TryGetValue(handle, out var path))
+        {
+            return Stat(path, cancellationToken);
+        }
+        throw new HandleNotFoundException(handle);
+    }
+
+    public Task SetStat(SFTPPath path, SFTPAttributes attributes, CancellationToken cancellationToken = default)
+        => DoStat(path, attributes, cancellationToken);
+
+    public Task FSetStat(SFTPHandle handle, SFTPAttributes attributes, CancellationToken cancellationToken = default)
+    {
+        if (_filehandles.TryGetValue(handle, out var path))
+        {
+            return SetStat(path, attributes, cancellationToken);
+        }
+        throw new HandleNotFoundException(handle);
+    }
+
+    public Task<SFTPHandle> OpenDir(SFTPPath path, CancellationToken cancellationToken = default)
+    {
+        var handle = GetHandle();
+        _filehandles.Add(handle, path);
+        return Task.FromResult(handle);
+    }
+
+    public Task<SFTPNames> ReadDir(SFTPHandle handle, CancellationToken cancellationToken = default)
+    {
+        if (_filehandles.TryGetValue(handle, out var path))
+        {
+            _filehandles.Remove(handle);
+            return Task.FromResult(new SFTPNames(new DirectoryInfo(path.Path).GetFileSystemInfos().Select(fso => SFTPName.FromFileSystemInfo(fso)).OrderBy(f => f.Name)));
+        }
+        return Task.FromResult(SFTPNames.EOF);
+    }
+
+    public Task Remove(SFTPPath path, CancellationToken cancellationToken = default)
+    {
+        if (TryGetFSObject(path, out var fsObject) && fsObject is FileInfo)
+        {
+            File.Delete(fsObject.FullName);
+            return Task.CompletedTask;
+        }
+        throw new PathNotFoundException(path);
+    }
+
+    public Task MakeDir(SFTPPath path, SFTPAttributes attributes, CancellationToken cancellationToken = default)
+    {
+        Directory.CreateDirectory(path.Path);
         return Task.CompletedTask;
     }
 
-    private static bool TryGetFSObject(string path, [NotNullWhen(true)] out FileSystemInfo? fileSystemObject)
+    public Task RemoveDir(SFTPPath path, CancellationToken cancellationToken = default)
     {
-        if (Directory.Exists(path))
+        if (TryGetFSObject(path, out var fsObject) && fsObject is DirectoryInfo)
         {
-            fileSystemObject = new DirectoryInfo(path);
+            Directory.Delete(path.Path);
+            return Task.CompletedTask;
+        }
+        throw new PathNotFoundException(path);
+    }
+
+    public Task<SFTPPath> RealPath(SFTPPath path, CancellationToken cancellationToken = default)
+        => Task.FromResult(path);
+
+    public Task<SFTPAttributes> Stat(SFTPPath path, CancellationToken cancellationToken = default)
+        => LStat(path, cancellationToken);
+
+    public Task Rename(SFTPPath oldPath, SFTPPath newPath, CancellationToken cancellationToken = default)
+    {
+        if (TryGetFSObject(oldPath, out var fsOldObject) && fsOldObject is FileInfo)
+        {
+            File.Move(fsOldObject.FullName, newPath.Path);
+            return Task.CompletedTask;
+        }
+        throw new PathNotFoundException(oldPath);
+    }
+
+    public Task<SFTPName> ReadLink(SFTPPath path, CancellationToken cancellationToken = default)
+        => throw new NotImplementedException();
+
+    public Task SymLink(SFTPPath linkPath, SFTPPath targetPath, CancellationToken cancellationToken = default)
+        => throw new NotImplementedException();
+
+
+    private static Task DoStat(SFTPPath path, SFTPAttributes attributes, CancellationToken cancellationToken = default)
+    {
+        if (TryGetFSObject(path, out var fsoObject))
+        {
+            if (attributes.LastAccessedTime != DateTimeOffset.MinValue)
+            {
+                fsoObject.LastAccessTimeUtc = attributes.LastAccessedTime.UtcDateTime;
+            }
+            if (attributes.LastModifiedTime != DateTimeOffset.MinValue)
+            {
+                fsoObject.LastWriteTimeUtc = attributes.LastModifiedTime.UtcDateTime;
+            }
+            // TODO: Read/Write/Execute... etc.
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private static bool TryGetFSObject(SFTPPath path, [NotNullWhen(true)] out FileSystemInfo? fileSystemObject)
+    {
+        if (Directory.Exists(path.Path))
+        {
+            fileSystemObject = new DirectoryInfo(path.Path);
             return true;
         }
-        if (File.Exists(path))
+        if (File.Exists(path.Path))
         {
-            fileSystemObject = new FileInfo(path);
+            fileSystemObject = new FileInfo(path.Path);
             return true;
         }
         fileSystemObject = null;
         return false;
     }
 
-    private static string GetHandle()
-        => Guid.NewGuid().ToString("N");
+    private static SFTPHandle GetHandle()
+        => new(Guid.NewGuid().ToString("N"));
 }

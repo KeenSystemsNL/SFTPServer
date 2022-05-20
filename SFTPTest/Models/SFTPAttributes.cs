@@ -12,7 +12,7 @@ public record SFTPAttributes(
     DateTimeOffset LastModifiedTime
 )
 {
-    private static readonly uint _defaultowner = 0;    // 65534 should be "nobody"
+    private static readonly uint _defaultowner = 0;
     private static readonly uint _defaultgroup = _defaultowner;
 
     private static readonly Permissions _defaultpermissions =
@@ -21,10 +21,24 @@ public record SFTPAttributes(
         | Permissions.User_Write
         | Permissions.Group_Read;
 
+    public static readonly SFTPAttributes Dummy = new(
+        0, _defaultowner, _defaultgroup, _defaultpermissions, DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch
+    );
+
 
     public IDictionary<string, string> ExtendeAttributes { get; } = new Dictionary<string, string>();
     public string GetLongFileName(string name)
         => ((FormattableString)$"{GetPermissionBits()} {1,3} {LookupId(Uid),-8} {LookupId(Gid),-8} {FileSize,8} {LastModifiedTime,12:MMM dd HH:mm} {name}").ToString(CultureInfo.InvariantCulture);
+
+    public static SFTPAttributes FromFileSystemInfo(FileSystemInfo fileSystemInfo)
+        => new(
+            GetLength(fileSystemInfo),
+            _defaultowner,
+            _defaultgroup,
+            _defaultpermissions | GetFileTypeBits(fileSystemInfo),
+            fileSystemInfo.LastAccessTimeUtc,
+            fileSystemInfo.LastWriteTimeUtc
+        );
 
     private static string LookupId(uint id) => id switch
     {
@@ -38,17 +52,6 @@ public record SFTPAttributes(
 
     private static string AttrStr(bool read, bool write, bool execute)
         => $"{(read ? "r" : "-")}{(write ? "w" : "-")}{(execute ? "x" : "-")}";
-
-    public SFTPAttributes(FileSystemInfo fsInfo)
-        : this(
-              GetLength(fsInfo),
-              _defaultowner,
-              _defaultgroup,
-              _defaultpermissions | GetFileTypeBits(fsInfo),
-              fsInfo.LastAccessTimeUtc,
-              fsInfo.LastWriteTimeUtc
-            )
-    { }
 
     private static Permissions GetFileTypeBits(FileSystemInfo fsInfo)
         => fsInfo switch

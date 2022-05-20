@@ -1,9 +1,11 @@
-﻿namespace SFTPTest.Exceptions;
+﻿using SFTPTest.Models;
+
+namespace SFTPTest.Exceptions;
 
 public class HandleNotFoundException : NotFoundException
 {
-    public string Handle { get; init; }
+    public SFTPHandle Handle { get; init; }
 
-    public HandleNotFoundException(string handle)
+    public HandleNotFoundException(SFTPHandle handle)
         => Handle = handle;
 }
