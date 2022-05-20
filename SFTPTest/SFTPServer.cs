@@ -48,8 +48,10 @@ public class SFTPServer : ISTPServer
             { RequestType.REALPATH, RealPathHandler },
             { RequestType.STAT, StatHandler },
             { RequestType.RENAME, RenameHandler },
+#if NET6_0_OR_GREATER
             { RequestType.READLINK, ReadLinkHandler },
             { RequestType.SYMLINK, SymLinkHandler }
+#endif
         };
     }
 
@@ -268,6 +270,7 @@ public class SFTPServer : ISTPServer
         await SendStatus(requestId, Status.OK, cancellationToken).ConfigureAwait(false);
     }
 
+#if NET6_0_OR_GREATER
     private async Task ReadLinkHandler(uint requestId, CancellationToken cancellationToken = default)
     {
         var path = _sftphandler.GetPath(new SFTPPath(_options.Root), new SFTPPath(await _reader.ReadString(cancellationToken).ConfigureAwait(false)));
@@ -288,7 +291,7 @@ public class SFTPServer : ISTPServer
         await _sftphandler.SymLink(linkpath, targetpath, cancellationToken).ConfigureAwait(false);
         await SendStatus(requestId, Status.OK, cancellationToken).ConfigureAwait(false);
     }
-
+#endif
 
     private async Task SendHandle(uint requestId, string handle, CancellationToken cancellationToken = default)
     {

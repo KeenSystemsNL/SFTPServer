@@ -159,6 +159,7 @@ public class DefaultSFTPHandler : ISFTPHandler
         throw new PathNotFoundException(oldPath);
     }
 
+#if NET6_0_OR_GREATER
     public Task<SFTPName> ReadLink(SFTPPath path, CancellationToken cancellationToken = default)
     {
         if (TryGetFSObject(path, out var fsObject) && fsObject.LinkTarget != null)
@@ -184,7 +185,7 @@ public class DefaultSFTPHandler : ISFTPHandler
         }
         throw new PathNotFoundException(targetPath);
     }
-
+#endif
 
     private static Task DoStat(SFTPPath path, SFTPAttributes attributes, CancellationToken cancellationToken = default)
     {

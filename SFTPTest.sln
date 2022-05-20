@@ -5,6 +5,8 @@ VisualStudioVersion = 17.1.32407.343
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SFTPTest", "SFTPTest\SFTPTest.csproj", "{6FA52C81-2423-44C3-B031-A512F5086934}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SFTPServer", "SFTPServer\SFTPServer.csproj", "{C999AD68-70E5-4AE0-8608-85ACE3D6EDAF}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -15,6 +17,10 @@ Global
 		{6FA52C81-2423-44C3-B031-A512F5086934}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{6FA52C81-2423-44C3-B031-A512F5086934}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{6FA52C81-2423-44C3-B031-A512F5086934}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C999AD68-70E5-4AE0-8608-85ACE3D6EDAF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C999AD68-70E5-4AE0-8608-85ACE3D6EDAF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C999AD68-70E5-4AE0-8608-85ACE3D6EDAF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C999AD68-70E5-4AE0-8608-85ACE3D6EDAF}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
