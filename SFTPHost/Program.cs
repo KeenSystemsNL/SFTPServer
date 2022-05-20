@@ -40,7 +40,6 @@ public class Program
         var options = serviceprovider.GetRequiredService<IOptions<SFTPServerOptions>>();
         var server = new SFTPServer(
             options,
-            serviceprovider.GetRequiredService<ILogger<SFTPServer>>(),
             stdin,
             stdout,
             new DefaultSFTPHandler()

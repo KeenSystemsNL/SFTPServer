@@ -1,5 +1,4 @@
-﻿using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
+﻿using Microsoft.Extensions.Options;
 using SFTP.Enums;
 using SFTP.Exceptions;
 using SFTP.IO;
@@ -10,7 +9,6 @@ namespace SFTP;
 public sealed class SFTPServer : ISFTPServer
 {
     private readonly SFTPServerOptions _options;
-    private readonly ILogger<SFTPServer> _logger;
     private readonly SshStreamReader _reader;
     private readonly SshStreamWriter _writer;
     private readonly ISFTPHandler _sftphandler;
@@ -18,13 +16,12 @@ public sealed class SFTPServer : ISFTPServer
 
     private readonly Dictionary<RequestType, Func<uint, CancellationToken, Task>> _messagehandlers;
 
-    public SFTPServer(IOptions<SFTPServerOptions> options, ILogger<SFTPServer> logger, Stream @in, Stream @out)
-        : this(options, logger, @in, @out, new DefaultSFTPHandler()) { }
+    public SFTPServer(IOptions<SFTPServerOptions> options, Stream @in, Stream @out)
+        : this(options, @in, @out, new DefaultSFTPHandler()) { }
 
-    public SFTPServer(IOptions<SFTPServerOptions> options, ILogger<SFTPServer> logger, Stream @in, Stream @out, ISFTPHandler sftpHandler)
+    public SFTPServer(IOptions<SFTPServerOptions> options, Stream @in, Stream @out, ISFTPHandler sftpHandler)
     {
         _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
-        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
         _reader = new SshStreamReader(@in ?? throw new ArgumentNullException(nameof(@in)));
         _writer = new SshStreamWriter(@out ?? throw new ArgumentNullException(nameof(@out)), _options.MaxMessageSize);
@@ -76,7 +73,6 @@ public sealed class SFTPServer : ISFTPServer
                 {
                     // Get requestid
                     var requestid = await _reader.ReadUInt32(cancellationToken).ConfigureAwait(false);
-                    _logger.LogInformation("{msgtype} [ID: {requestid} LEN: {msglength}]", msgtype, requestid, msglength);
 
                     // Get handler and handle the message when supported
                     if (_messagehandlers.TryGetValue(msgtype, out var handler))
@@ -87,12 +83,10 @@ public sealed class SFTPServer : ISFTPServer
                         }
                         catch (HandlerException ex)
                         {
-                            _logger.Log(ex.LogLevel, ex, "SFTPHandler exception");
                             await SendStatus(requestid, ex.Status, cancellationToken).ConfigureAwait(false);
                         }
-                        catch (Exception ex)
+                        catch
                         {
-                            _logger.LogError(ex, "An error occured");
                             await SendStatus(requestid, Status.FAILURE, cancellationToken).ConfigureAwait(false);
                         }
                     }
@@ -117,7 +111,6 @@ public sealed class SFTPServer : ISFTPServer
 
         // Get client extensions (if any)
         var clientextensions = new Dictionary<string, string>();
-        _logger.LogInformation("LEN: {len}", extensiondatalength);
         while (extensiondatalength > 0)
         {
             var name = await _reader.ReadString(cancellationToken).ConfigureAwait(false);
