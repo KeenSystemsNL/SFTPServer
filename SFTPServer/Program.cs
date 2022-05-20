@@ -6,7 +6,7 @@ using NLog.Extensions.Logging;
 using SFTPTest;
 using System.Reflection;
 
-namespace SFTPServer;
+namespace SFTPHost;
 
 public class Program
 {
