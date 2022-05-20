@@ -1,6 +1,6 @@
-﻿using SFTPTest.Models;
+﻿using SFTP.Models;
 
-namespace SFTPTest.Exceptions;
+namespace SFTP.Exceptions;
 
 public class HandleNotFoundException : NotFoundException
 {

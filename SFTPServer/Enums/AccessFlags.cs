@@ -1,4 +1,4 @@
-﻿namespace SFTPTest.Enums;
+﻿namespace SFTP.Enums;
 
 [Flags]
 internal enum AccessFlags : uint

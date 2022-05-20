@@ -1,9 +1,9 @@
-﻿using SFTPTest.Enums;
-using SFTPTest.Models;
+﻿using SFTP.Enums;
+using SFTP.Models;
 using System.Buffers.Binary;
 using System.Text;
 
-namespace SFTPTest.IO;
+namespace SFTP.IO;
 
 internal class SshStreamWriter
 {
@@ -42,7 +42,7 @@ internal class SshStreamWriter
         }
     }
 
-    public async Task Write(SFTPAttributes attributes, PFlags flags = PFlags.DEFAULT, CancellationToken cancellationToken = default)
+    public async Task Write(Attributes attributes, PFlags flags = PFlags.DEFAULT, CancellationToken cancellationToken = default)
     {
         await Write(flags, cancellationToken).ConfigureAwait(false);
         if (flags.HasFlag(PFlags.SIZE))

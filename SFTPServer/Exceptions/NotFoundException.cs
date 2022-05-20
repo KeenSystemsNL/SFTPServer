@@ -1,9 +1,9 @@
 ﻿using Microsoft.Extensions.Logging;
-using SFTPTest.Enums;
+using SFTP.Enums;
 
-namespace SFTPTest.Exceptions;
+namespace SFTP.Exceptions;
 
-public abstract class NotFoundException : SFTPHandlerException
+public abstract class NotFoundException : HandlerException
 {
     public NotFoundException()
         : base(LogLevel.Debug, Status.NO_SUCH_FILE) { }

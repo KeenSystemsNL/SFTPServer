@@ -1,13 +1,13 @@
 ﻿using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using SFTPTest.Enums;
-using SFTPTest.Exceptions;
-using SFTPTest.IO;
-using SFTPTest.Models;
+using SFTP.Enums;
+using SFTP.Exceptions;
+using SFTP.IO;
+using SFTP.Models;
 
-namespace SFTPTest;
+namespace SFTP;
 
-public class SFTPServer : ISTPServer
+public sealed class SFTPServer : ISFTPServer
 {
     private readonly SFTPServerOptions _options;
     private readonly ILogger<SFTPServer> _logger;
@@ -55,7 +55,6 @@ public class SFTPServer : ISTPServer
         };
     }
 
-
     public async Task Run(CancellationToken cancellationToken = default)
     {
         uint msglength;
@@ -83,7 +82,7 @@ public class SFTPServer : ISTPServer
                         {
                             await handler(requestid, cancellationToken).ConfigureAwait(false);
                         }
-                        catch (SFTPHandlerException ex)
+                        catch (HandlerException ex)
                         {
                             _logger.Log(ex.LogLevel, ex, "SFTPHandler exception");
                             await SendStatus(requestid, ex.Status, cancellationToken).ConfigureAwait(false);
@@ -300,7 +299,7 @@ public class SFTPServer : ISTPServer
         await _writer.Write(handle, cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task SendStat(uint requestId, SFTPAttributes attributes, CancellationToken cancellationToken = default)
+    private async Task SendStat(uint requestId, Attributes attributes, CancellationToken cancellationToken = default)
     {
         await _writer.Write(ResponseType.ATTRS, cancellationToken).ConfigureAwait(false);
         await _writer.Write(requestId, cancellationToken).ConfigureAwait(false);

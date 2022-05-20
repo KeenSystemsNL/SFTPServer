@@ -1,4 +1,4 @@
-﻿namespace SFTPTest;
+﻿namespace SFTP;
 
 public record SFTPServerOptions()
 {

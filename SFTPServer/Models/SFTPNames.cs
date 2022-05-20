@@ -1,6 +1,6 @@
-﻿using SFTPTest.Enums;
+﻿using SFTP.Enums;
 
-namespace SFTPTest.Models;
+namespace SFTP.Models;
 
 public record SFTPNames(IEnumerable<SFTPName> Names)
 {

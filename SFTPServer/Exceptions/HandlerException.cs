@@ -1,13 +1,13 @@
 ﻿using Microsoft.Extensions.Logging;
-using SFTPTest.Enums;
+using SFTP.Enums;
 
-namespace SFTPTest.Exceptions;
-public abstract class SFTPHandlerException : Exception
+namespace SFTP.Exceptions;
+public abstract class HandlerException : Exception
 {
     public LogLevel LogLevel { get; init; }
     public Status Status { get; init; }
 
-    public SFTPHandlerException(LogLevel logLevel, Status status)
+    public HandlerException(LogLevel logLevel, Status status)
     {
         LogLevel = logLevel;
         Status = status;
