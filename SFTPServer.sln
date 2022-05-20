@@ -3,9 +3,9 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.1.32407.343
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SFTPServer", "SFTPTest\SFTPServer.csproj", "{6FA52C81-2423-44C3-B031-A512F5086934}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SFTPServer", "SFTPServer\SFTPServer.csproj", "{6FA52C81-2423-44C3-B031-A512F5086934}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SFTPHost", "SFTPServer\SFTPHost.csproj", "{C999AD68-70E5-4AE0-8608-85ACE3D6EDAF}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SFTPHost", "SFTPHost\SFTPHost.csproj", "{C999AD68-70E5-4AE0-8608-85ACE3D6EDAF}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

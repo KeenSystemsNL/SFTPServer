@@ -21,7 +21,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
-	  <ProjectReference Include="..\SFTPTest\SFTPServer.csproj" />
+	  <ProjectReference Include="..\SFTPServer\SFTPServer.csproj" />
 	</ItemGroup>
 
 	<ItemGroup>
