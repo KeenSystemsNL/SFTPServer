@@ -41,13 +41,13 @@ internal class SshStreamReader
     public async Task<SFTPAttributes> ReadAttributes(CancellationToken cancellationToken = default)
     {
         var flags = (PFlags)await ReadUInt32(cancellationToken).ConfigureAwait(false);
-        var size = flags.HasFlag(PFlags.SIZE) ? await ReadUInt64(cancellationToken).ConfigureAwait(false) : 0;
-        var owner = flags.HasFlag(PFlags.UIDGUID) ? await ReadUInt32(cancellationToken).ConfigureAwait(false) : 0;
-        var group = flags.HasFlag(PFlags.UIDGUID) ? await ReadUInt32(cancellationToken).ConfigureAwait(false) : 0;
-        var permissions = flags.HasFlag(PFlags.PERMISSIONS) ? (Permissions)await ReadUInt32(cancellationToken).ConfigureAwait(false) : Permissions.None;
-        var atime = flags.HasFlag(PFlags.ACMODTIME) ? await ReadTime(cancellationToken).ConfigureAwait(false) : DateTimeOffset.MinValue;
-        var mtime = flags.HasFlag(PFlags.ACMODTIME) ? await ReadTime(cancellationToken).ConfigureAwait(false) : DateTimeOffset.MinValue;
-        var extended_count = flags.HasFlag(PFlags.EXTENDED) ? await ReadUInt32(cancellationToken).ConfigureAwait(false) : 0;
+        var size = flags.HasFlag(PFlags.Size) ? await ReadUInt64(cancellationToken).ConfigureAwait(false) : 0;
+        var owner = flags.HasFlag(PFlags.UidGid) ? await ReadUInt32(cancellationToken).ConfigureAwait(false) : 0;
+        var group = flags.HasFlag(PFlags.UidGid) ? await ReadUInt32(cancellationToken).ConfigureAwait(false) : 0;
+        var permissions = flags.HasFlag(PFlags.Permissions) ? (Permissions)await ReadUInt32(cancellationToken).ConfigureAwait(false) : Permissions.None;
+        var atime = flags.HasFlag(PFlags.AccessModifiedTime) ? await ReadTime(cancellationToken).ConfigureAwait(false) : DateTimeOffset.MinValue;
+        var mtime = flags.HasFlag(PFlags.AccessModifiedTime) ? await ReadTime(cancellationToken).ConfigureAwait(false) : DateTimeOffset.MinValue;
+        var extended_count = flags.HasFlag(PFlags.Extended) ? await ReadUInt32(cancellationToken).ConfigureAwait(false) : 0;
 
         var attrs = new SFTPAttributes(size, owner, group, permissions, atime, mtime);
 

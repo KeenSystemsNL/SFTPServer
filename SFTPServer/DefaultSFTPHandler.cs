@@ -185,13 +185,13 @@ public class DefaultSFTPHandler : ISFTPHandler
     }
 #endif
 
-    public virtual Task Extended(string name, Stream @in, Stream @out)
+    public virtual Task Extended(string name, Stream inStream, Stream outStream)
         => throw new NotImplementedException();
 
     public virtual SFTPPath GetPath(SFTPPath root, SFTPPath path)
     {
         var result = Path.GetFullPath(Path.Combine(root.Path, path.Path.TrimStart('/'))).Replace('/', '\\');
-        return new SFTPPath(result.StartsWith(root.Path) ? result : root.Path);
+        return new SFTPPath(result.StartsWith(root.Path, StringComparison.Ordinal) ? result : root.Path);
     }
 
     private static Task DoStat(SFTPPath path, SFTPAttributes attributes, CancellationToken cancellationToken = default)

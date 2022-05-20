@@ -5,7 +5,7 @@ using System.Text;
 
 namespace SFTP.IO;
 
-internal class SshStreamWriter
+internal class SshStreamWriter : IDisposable
 {
     private readonly Stream _stream;
     private readonly MemoryStream _memorystream;
@@ -47,28 +47,28 @@ internal class SshStreamWriter
     public async Task Write(SFTPAttributes attributes, PFlags flags = PFlags.DEFAULT, CancellationToken cancellationToken = default)
     {
         await Write(flags, cancellationToken).ConfigureAwait(false);
-        if (flags.HasFlag(PFlags.SIZE))
+        if (flags.HasFlag(PFlags.Size))
         {
             await Write(attributes.FileSize, cancellationToken).ConfigureAwait(false);
         }
 
-        if (flags.HasFlag(PFlags.UIDGUID))
+        if (flags.HasFlag(PFlags.UidGid))
         {
             await Write(attributes.Uid, cancellationToken).ConfigureAwait(false);
             await Write(attributes.Gid, cancellationToken).ConfigureAwait(false);
         }
-        if (flags.HasFlag(PFlags.PERMISSIONS))
+        if (flags.HasFlag(PFlags.Permissions))
         {
             await Write(attributes.Permissions, cancellationToken).ConfigureAwait(false);
         }
 
-        if (flags.HasFlag(PFlags.ACMODTIME))
+        if (flags.HasFlag(PFlags.AccessModifiedTime))
         {
             await Write(attributes.LastAccessedTime, cancellationToken).ConfigureAwait(false);
             await Write(attributes.LastModifiedTime, cancellationToken).ConfigureAwait(false);
         }
 
-        if (flags.HasFlag(PFlags.EXTENDED))
+        if (flags.HasFlag(PFlags.Extended))
         {
             await Write(attributes.ExtendeAttributes.Count, cancellationToken).ConfigureAwait(false);
             foreach (var a in attributes.ExtendeAttributes)
@@ -136,4 +136,6 @@ internal class SshStreamWriter
         _memorystream.Position = 0;
         _memorystream.SetLength(0);
     }
+
+    public void Dispose() => ((IDisposable)_memorystream).Dispose();
 }

@@ -12,14 +12,14 @@ public record SFTPAttributes(
     DateTimeOffset LastModifiedTime
 )
 {
-    private static readonly uint _defaultowner = 0;
-    private static readonly uint _defaultgroup = _defaultowner;
+    private const uint _defaultowner = 0;
+    private const uint _defaultgroup = _defaultowner;
 
     private static readonly Permissions _defaultpermissions =
-        Permissions.User_Execute
-        | Permissions.User_Read
-        | Permissions.User_Write
-        | Permissions.Group_Read;
+        Permissions.UserExecute
+        | Permissions.UserRead
+        | Permissions.UserWrite
+        | Permissions.GroupRead;
 
     public static readonly SFTPAttributes Dummy = new(
         0, _defaultowner, _defaultgroup, _defaultpermissions, DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch
@@ -48,7 +48,7 @@ public record SFTPAttributes(
     };
 
     private string GetPermissionBits()
-        => $"{(Permissions.HasFlag(Permissions.Directory) ? "d" : "-")}{AttrStr(Permissions.HasFlag(Permissions.User_Read), Permissions.HasFlag(Permissions.User_Write), Permissions.HasFlag(Permissions.User_Execute))}{AttrStr(Permissions.HasFlag(Permissions.Group_Read), Permissions.HasFlag(Permissions.Group_Write), Permissions.HasFlag(Permissions.Group_Execute))}{AttrStr(Permissions.HasFlag(Permissions.Other_Read), Permissions.HasFlag(Permissions.Other_Write), Permissions.HasFlag(Permissions.Other_Execute))}";
+        => $"{(Permissions.HasFlag(Permissions.Directory) ? "d" : "-")}{AttrStr(Permissions.HasFlag(Permissions.UserRead), Permissions.HasFlag(Permissions.UserWrite), Permissions.HasFlag(Permissions.UserExecute))}{AttrStr(Permissions.HasFlag(Permissions.GroupRead), Permissions.HasFlag(Permissions.GroupWrite), Permissions.HasFlag(Permissions.GroupExecute))}{AttrStr(Permissions.HasFlag(Permissions.OtherRead), Permissions.HasFlag(Permissions.OtherWrite), Permissions.HasFlag(Permissions.OtherExecute))}";
 
     private static string AttrStr(bool read, bool write, bool execute)
         => $"{(read ? "r" : "-")}{(write ? "w" : "-")}{(execute ? "x" : "-")}";
@@ -57,7 +57,7 @@ public record SFTPAttributes(
         => fsInfo switch
         {
             DirectoryInfo => Permissions.Directory,
-            FileInfo => Permissions.Regular_File,
+            FileInfo => Permissions.RegularFile,
             _ => Permissions.None
         };
 

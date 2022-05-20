@@ -2,11 +2,11 @@
 
 internal enum ResponseType : byte
 {
-    STATUS = 0x65,
-    HANDLE = 0x66,
-    DATA = 0x67,
-    NAME = 0x68,
-    ATTRS = 0x69,
+    Status = 0x65,
+    Handle = 0x66,
+    Data = 0x67,
+    Name = 0x68,
+    Attributes = 0x69,
 
-    EXTENDED_REPLY = 0xC9
+    Extended = 0xC9
 }

@@ -32,13 +32,12 @@ public class Program
             Environment.Exit(1);
         };
 
+        var options = serviceprovider.GetRequiredService<IOptions<SFTPServerOptions>>();
 
         _logger.LogInformation("Starting server...");
         using var stdin = Console.OpenStandardInput();
         using var stdout = Console.OpenStandardOutput();
-
-        var options = serviceprovider.GetRequiredService<IOptions<SFTPServerOptions>>();
-        var server = new SFTPServer(
+        using var server = new SFTPServer(
             options,
             stdin,
             stdout,

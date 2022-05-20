@@ -5,5 +5,5 @@ namespace SFTP.Exceptions;
 public abstract class NotFoundException : HandlerException
 {
     public NotFoundException()
-        : base(Status.NO_SUCH_FILE) { }
+        : base(Status.NoSuchFile) { }
 }
