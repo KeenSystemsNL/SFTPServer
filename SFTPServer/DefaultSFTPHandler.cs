@@ -9,13 +9,10 @@ public class DefaultSFTPHandler : ISFTPHandler
     private readonly Dictionary<SFTPHandle, SFTPPath> _filehandles = new();
     private readonly Dictionary<SFTPHandle, Stream> _streamhandles = new();
 
-    public SFTPPath GetPath(SFTPPath root, SFTPPath path)
-    {
-        var result = Path.GetFullPath(Path.Combine(root.Path, path.Path.TrimStart('/'))).Replace('/', '\\');
-        return new SFTPPath(result.StartsWith(root.Path) ? result : root.Path);
-    }
+    public Task<SFTPExtensions> Init(uint clientVersion, string user, SFTPExtensions extensions, CancellationToken cancellationToken = default)
+        => throw new NotImplementedException();
 
-    public Task<SFTPHandle> Open(SFTPPath path, FileMode fileMode, FileAccess fileAccess, Attributes attributes, CancellationToken cancellationToken = default)
+    public Task<SFTPHandle> Open(SFTPPath path, FileMode fileMode, FileAccess fileAccess, SFTPAttributes attributes, CancellationToken cancellationToken = default)
     {
         var handle = GetHandle();
         _streamhandles.Add(handle, File.Open(path.Path, fileMode, fileAccess, FileShare.ReadWrite));
@@ -70,16 +67,16 @@ public class DefaultSFTPHandler : ISFTPHandler
         throw new HandleNotFoundException(handle);
     }
 
-    public Task<Attributes> LStat(SFTPPath path, CancellationToken cancellationToken = default)
+    public Task<SFTPAttributes> LStat(SFTPPath path, CancellationToken cancellationToken = default)
     {
         if (TryGetFSObject(path, out var fso))
         {
-            return Task.FromResult(Attributes.FromFileSystemInfo(fso));
+            return Task.FromResult(SFTPAttributes.FromFileSystemInfo(fso));
         }
         throw new PathNotFoundException(path);
     }
 
-    public Task<Attributes> FStat(SFTPHandle handle, CancellationToken cancellationToken = default)
+    public Task<SFTPAttributes> FStat(SFTPHandle handle, CancellationToken cancellationToken = default)
     {
         if (_filehandles.TryGetValue(handle, out var path))
         {
@@ -88,10 +85,10 @@ public class DefaultSFTPHandler : ISFTPHandler
         throw new HandleNotFoundException(handle);
     }
 
-    public Task SetStat(SFTPPath path, Attributes attributes, CancellationToken cancellationToken = default)
+    public Task SetStat(SFTPPath path, SFTPAttributes attributes, CancellationToken cancellationToken = default)
         => DoStat(path, attributes, cancellationToken);
 
-    public Task FSetStat(SFTPHandle handle, Attributes attributes, CancellationToken cancellationToken = default)
+    public Task FSetStat(SFTPHandle handle, SFTPAttributes attributes, CancellationToken cancellationToken = default)
     {
         if (_filehandles.TryGetValue(handle, out var path))
         {
@@ -127,7 +124,7 @@ public class DefaultSFTPHandler : ISFTPHandler
         throw new PathNotFoundException(path);
     }
 
-    public Task MakeDir(SFTPPath path, Attributes attributes, CancellationToken cancellationToken = default)
+    public Task MakeDir(SFTPPath path, SFTPAttributes attributes, CancellationToken cancellationToken = default)
     {
         Directory.CreateDirectory(path.Path);
         return Task.CompletedTask;
@@ -146,7 +143,7 @@ public class DefaultSFTPHandler : ISFTPHandler
     public Task<SFTPPath> RealPath(SFTPPath path, CancellationToken cancellationToken = default)
         => Task.FromResult(path);
 
-    public Task<Attributes> Stat(SFTPPath path, CancellationToken cancellationToken = default)
+    public Task<SFTPAttributes> Stat(SFTPPath path, CancellationToken cancellationToken = default)
         => LStat(path, cancellationToken);
 
     public Task Rename(SFTPPath oldPath, SFTPPath newPath, CancellationToken cancellationToken = default)
@@ -187,7 +184,16 @@ public class DefaultSFTPHandler : ISFTPHandler
     }
 #endif
 
-    private static Task DoStat(SFTPPath path, Attributes attributes, CancellationToken cancellationToken = default)
+    public Task Extended(string name, Stream @in, Stream @out)
+        => throw new NotImplementedException();
+
+    public SFTPPath GetPath(SFTPPath root, SFTPPath path)
+    {
+        var result = Path.GetFullPath(Path.Combine(root.Path, path.Path.TrimStart('/'))).Replace('/', '\\');
+        return new SFTPPath(result.StartsWith(root.Path) ? result : root.Path);
+    }
+
+    private static Task DoStat(SFTPPath path, SFTPAttributes attributes, CancellationToken cancellationToken = default)
     {
         if (TryGetFSObject(path, out var fsoObject))
         {

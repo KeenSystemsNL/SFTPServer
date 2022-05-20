@@ -50,8 +50,9 @@ public sealed class SFTPServer : ISFTPServer
             { RequestType.RENAME, RenameHandler },
 #if NET6_0_OR_GREATER
             { RequestType.READLINK, ReadLinkHandler },
-            { RequestType.SYMLINK, SymLinkHandler }
+            { RequestType.SYMLINK, SymLinkHandler },
 #endif
+            { RequestType.EXTENDED, ExtendedHandler }
         };
     }
 
@@ -67,7 +68,9 @@ public sealed class SFTPServer : ISFTPServer
                 var msgtype = (RequestType)await _reader.ReadByte(cancellationToken).ConfigureAwait(false);
                 if (_protocolversion == 0 && msgtype is RequestType.INIT)
                 {
-                    await InitHandler(cancellationToken).ConfigureAwait(false);
+                    // We subtract 5 bytes (1 for requesttype and 4 for protocolversion) from msglength and pass the
+                    // remainder so the inithandler can parse extensions (if any)
+                    await InitHandler(msglength - 5, cancellationToken).ConfigureAwait(false);
                 }
                 else if (_protocolversion > 0)
                 {
@@ -106,17 +109,32 @@ public sealed class SFTPServer : ISFTPServer
     }
 
 
-    private async Task InitHandler(CancellationToken cancellationToken = default)
+    private async Task InitHandler(uint extensiondatalength, CancellationToken cancellationToken = default)
     {
         // Get client version
         var clientversion = await _reader.ReadUInt32(cancellationToken).ConfigureAwait(false);
         _protocolversion = Math.Min(clientversion, 3);
 
-        _logger.LogInformation("CLIENT version {clientversion}, sending version {serverversion}", clientversion, _protocolversion);
+        // Get client extensions (if any)
+        var clientextensions = new Dictionary<string, string>();
+        _logger.LogInformation("LEN: {len}", extensiondatalength);
+        while (extensiondatalength > 0)
+        {
+            var name = await _reader.ReadString(cancellationToken).ConfigureAwait(false);
+            var data = await _reader.ReadString(cancellationToken).ConfigureAwait(false);
+            extensiondatalength -= (uint)(name.Length + data.Length);
+        }
+
+        var serverextensions = await _sftphandler.Init(clientversion, Environment.UserName, new SFTPExtensions(clientextensions)).ConfigureAwait(false);
 
         // Send version response
         await _writer.Write(RequestType.VERSION, cancellationToken).ConfigureAwait(false);
         await _writer.Write(_protocolversion, cancellationToken).ConfigureAwait(false);
+        foreach (var e in serverextensions)
+        {
+            await _writer.Write(e.Key).ConfigureAwait(false);
+            await _writer.Write(e.Value).ConfigureAwait(false);
+        }
     }
 
     private async Task OpenHandler(uint requestId, CancellationToken cancellationToken = default)
@@ -292,6 +310,17 @@ public sealed class SFTPServer : ISFTPServer
     }
 #endif
 
+    private async Task ExtendedHandler(uint requestId, CancellationToken cancellationToken = default)
+    {
+        var name = await _reader.ReadString(cancellationToken).ConfigureAwait(false);
+
+        // Make sure we already output the requestId, the handler will have access to the output stream to write
+        // arbitrary data after this
+        await _writer.Write(requestId, cancellationToken).ConfigureAwait(false);
+        // Now the handler will have access to both our in- and out-streams
+        await _sftphandler.Extended(name, _reader.Stream, _writer.Stream).ConfigureAwait(false);
+    }
+
     private async Task SendHandle(uint requestId, string handle, CancellationToken cancellationToken = default)
     {
         await _writer.Write(ResponseType.HANDLE, cancellationToken).ConfigureAwait(false);
@@ -299,7 +328,7 @@ public sealed class SFTPServer : ISFTPServer
         await _writer.Write(handle, cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task SendStat(uint requestId, Attributes attributes, CancellationToken cancellationToken = default)
+    private async Task SendStat(uint requestId, SFTPAttributes attributes, CancellationToken cancellationToken = default)
     {
         await _writer.Write(ResponseType.ATTRS, cancellationToken).ConfigureAwait(false);
         await _writer.Write(requestId, cancellationToken).ConfigureAwait(false);
@@ -314,8 +343,11 @@ public sealed class SFTPServer : ISFTPServer
         await _writer.Write(ResponseType.STATUS, cancellationToken).ConfigureAwait(false);
         await _writer.Write(requestId, cancellationToken).ConfigureAwait(false);
         await _writer.Write(status, cancellationToken).ConfigureAwait(false);
-        await _writer.Write(errorMessage, cancellationToken).ConfigureAwait(false);
-        await _writer.Write(languageTag, cancellationToken).ConfigureAwait(false);
+        if (_protocolversion > 2)
+        {
+            await _writer.Write(errorMessage, cancellationToken).ConfigureAwait(false);
+            await _writer.Write(languageTag, cancellationToken).ConfigureAwait(false);
+        }
     }
 
     private static string GetStatusString(Status status)

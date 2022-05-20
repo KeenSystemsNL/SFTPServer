@@ -22,12 +22,10 @@ Implementing an `ISFTPHandler` should be pretty straightforward, simply implemen
 
 ## Known issues and limitations
 
-* Note that this library only implements V3; lower nor higher versions are supported. Clients connecting with a higher version will be negotiated down to V3, clients supporting a lower version than the V3 version will be ignored (actually, they will receive a V3 response to their `INIT` request).
-
-* The SFTP protocol (`V3` specifically) has been implemented as complete as possible. However, extension data during the [protocol initialisation](https://datatracker.ietf.org/doc/html/draft-ietf-secsh-filexfer-02#page-7) is currently not supported.
+* Note that this library only implements V3; higher versions are not supported. Clients connecting with a higher version will be negotiated down to V3.
 
 * The [`SymLink`](https://datatracker.ietf.org/doc/html/draft-ietf-secsh-filexfer-02#section-6.10) command has been implemented with the `linkpath` and `targetpath` swapped; I may or may not interpret the RFC incorrectly or the clients which were used to test the `SymLink` command (WinSCP, Cyberduck and the 'native' sftp commandline executable) had the arguments swapped.
 
 * The `DefaultSFTPHandler` **DOES NOT** take particular much care of path canonicalization or mitigations agains path traversion. When used in an untrusted environment extra care should be taken to ensure safety.
 
-* The `DefaultSFTPHandler` **DOES NOT** make a noteworthy effort to return correct POSIX file permissions, not setting permissions.
+* The `DefaultSFTPHandler` **DOES NOT** make a noteworthy effort to return correct POSIX file permissions, nor does it support setting permissions.

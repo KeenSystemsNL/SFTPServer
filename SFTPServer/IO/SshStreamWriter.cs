@@ -11,6 +11,8 @@ internal class SshStreamWriter
     private readonly MemoryStream _memorystream;
     private static readonly Encoding _encoding = new UTF8Encoding(false);
 
+    public Stream Stream => _memorystream;
+
     public SshStreamWriter(Stream stream, int bufferSize)
     {
         _stream = stream ?? throw new ArgumentNullException(nameof(stream));
@@ -42,7 +44,7 @@ internal class SshStreamWriter
         }
     }
 
-    public async Task Write(Attributes attributes, PFlags flags = PFlags.DEFAULT, CancellationToken cancellationToken = default)
+    public async Task Write(SFTPAttributes attributes, PFlags flags = PFlags.DEFAULT, CancellationToken cancellationToken = default)
     {
         await Write(flags, cancellationToken).ConfigureAwait(false);
         if (flags.HasFlag(PFlags.SIZE))

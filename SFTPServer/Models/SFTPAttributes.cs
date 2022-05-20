@@ -3,7 +3,7 @@ using System.Globalization;
 
 namespace SFTP.Models;
 
-public record Attributes(
+public record SFTPAttributes(
     ulong FileSize,
     uint Uid,
     uint Gid,
@@ -21,7 +21,7 @@ public record Attributes(
         | Permissions.User_Write
         | Permissions.Group_Read;
 
-    public static readonly Attributes Dummy = new(
+    public static readonly SFTPAttributes Dummy = new(
         0, _defaultowner, _defaultgroup, _defaultpermissions, DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch
     );
 
@@ -30,7 +30,7 @@ public record Attributes(
     public string GetLongFileName(string name)
         => ((FormattableString)$"{GetPermissionBits()} {1,3} {LookupId(Uid),-8} {LookupId(Gid),-8} {FileSize,8} {LastModifiedTime,12:MMM dd HH:mm} {name}").ToString(CultureInfo.InvariantCulture);
 
-    public static Attributes FromFileSystemInfo(FileSystemInfo fileSystemInfo)
+    public static SFTPAttributes FromFileSystemInfo(FileSystemInfo fileSystemInfo)
         => new(
             GetLength(fileSystemInfo),
             _defaultowner,

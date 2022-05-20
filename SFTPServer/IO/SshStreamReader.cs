@@ -10,6 +10,8 @@ internal class SshStreamReader
     private readonly Stream _stream;
     private static readonly Encoding _encoding = new UTF8Encoding(false);
 
+    public Stream Stream => _stream;
+
     public SshStreamReader(Stream stream)
         => _stream = stream ?? throw new ArgumentNullException(nameof(stream));
 
@@ -36,7 +38,7 @@ internal class SshStreamReader
             : DateTimeOffset.MinValue;
     }
 
-    public async Task<Attributes> ReadAttributes(CancellationToken cancellationToken = default)
+    public async Task<SFTPAttributes> ReadAttributes(CancellationToken cancellationToken = default)
     {
         var flags = (PFlags)await ReadUInt32(cancellationToken).ConfigureAwait(false);
         var size = flags.HasFlag(PFlags.SIZE) ? await ReadUInt64(cancellationToken).ConfigureAwait(false) : 0;
@@ -47,7 +49,7 @@ internal class SshStreamReader
         var mtime = flags.HasFlag(PFlags.ACMODTIME) ? await ReadTime(cancellationToken).ConfigureAwait(false) : DateTimeOffset.MinValue;
         var extended_count = flags.HasFlag(PFlags.EXTENDED) ? await ReadUInt32(cancellationToken).ConfigureAwait(false) : 0;
 
-        var attrs = new Attributes(size, owner, group, permissions, atime, mtime);
+        var attrs = new SFTPAttributes(size, owner, group, permissions, atime, mtime);
 
         for (var i = 0; i < extended_count; i++)
         {
