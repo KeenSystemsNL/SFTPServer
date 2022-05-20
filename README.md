@@ -29,3 +29,11 @@ Implementing an `ISFTPHandler` should be pretty straightforward, simply implemen
 * The `DefaultSFTPHandler` **DOES NOT** take particular much care of path canonicalization or mitigations agains path traversion. When used in an untrusted environment extra care should be taken to ensure safety.
 
 * The `DefaultSFTPHandler` **DOES NOT** make a noteworthy effort to return correct POSIX file permissions, nor does it support setting permissions.
+
+## License
+
+Licensed under MIT license. See [LICENSE](https://github.com/KeenSystemsNL/SFTPServer/raw/master/LICENSE) for details.
+
+### Attributions
+
+[Logo / icon by Alexiuz AS](https://icon-icons.com/icon/sftp/117855) ([Archived](https://web.archive.org/web/20220520155358/https://icon-icons.com/icon/sftp/117855))
