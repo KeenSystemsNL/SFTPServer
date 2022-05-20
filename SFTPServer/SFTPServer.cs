@@ -125,15 +125,15 @@ public sealed class SFTPServer : ISFTPServer
             extensiondatalength -= (uint)(name.Length + data.Length);
         }
 
-        var serverextensions = await _sftphandler.Init(clientversion, Environment.UserName, new SFTPExtensions(clientextensions)).ConfigureAwait(false);
+        var serverextensions = await _sftphandler.Init(clientversion, Environment.UserName, new SFTPExtensions(clientextensions), cancellationToken).ConfigureAwait(false);
 
         // Send version response
         await _writer.Write(RequestType.VERSION, cancellationToken).ConfigureAwait(false);
         await _writer.Write(_protocolversion, cancellationToken).ConfigureAwait(false);
         foreach (var e in serverextensions)
         {
-            await _writer.Write(e.Key).ConfigureAwait(false);
-            await _writer.Write(e.Value).ConfigureAwait(false);
+            await _writer.Write(e.Key, cancellationToken).ConfigureAwait(false);
+            await _writer.Write(e.Value, cancellationToken).ConfigureAwait(false);
         }
     }
 

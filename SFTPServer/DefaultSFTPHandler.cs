@@ -170,13 +170,14 @@ public class DefaultSFTPHandler : ISFTPHandler
     {
         if (TryGetFSObject(targetPath, out var fsObject))
         {
-            if (fsObject is FileSystemInfo)
+            switch (fsObject)
             {
-                File.CreateSymbolicLink(linkPath.Path, targetPath.Path);
-            }
-            else if (fsObject is DirectoryInfo)
-            {
-                Directory.CreateSymbolicLink(linkPath.Path, targetPath.Path);
+                case FileInfo:
+                    File.CreateSymbolicLink(linkPath.Path, targetPath.Path);
+                    break;
+                case DirectoryInfo:
+                    Directory.CreateSymbolicLink(linkPath.Path, targetPath.Path);
+                    break;
             }
             return Task.CompletedTask;
         }
