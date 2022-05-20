@@ -280,9 +280,12 @@ public class SFTPServer : ISTPServer
 
     private async Task SymLinkHandler(uint requestId, CancellationToken cancellationToken = default)
     {
+        //NOTE: target and link appear to be swapped from the RFC??
+        //Tested with WinSCP and CyberDuck
+        var targetpath = _sftphandler.GetPath(new SFTPPath(_options.Root), new SFTPPath(await _reader.ReadString(cancellationToken).ConfigureAwait(false)));
         var linkpath = _sftphandler.GetPath(new SFTPPath(_options.Root), new SFTPPath(await _reader.ReadString(cancellationToken).ConfigureAwait(false)));
-        var targetpathpath = _sftphandler.GetPath(new SFTPPath(_options.Root), new SFTPPath(await _reader.ReadString(cancellationToken).ConfigureAwait(false)));
-        await _sftphandler.SymLink(linkpath, targetpathpath, cancellationToken).ConfigureAwait(false);
+
+        await _sftphandler.SymLink(linkpath, targetpath, cancellationToken).ConfigureAwait(false);
         await SendStatus(requestId, Status.OK, cancellationToken).ConfigureAwait(false);
     }
 

@@ -160,10 +160,30 @@ public class DefaultSFTPHandler : ISFTPHandler
     }
 
     public Task<SFTPName> ReadLink(SFTPPath path, CancellationToken cancellationToken = default)
-        => throw new NotImplementedException();
+    {
+        if (TryGetFSObject(path, out var fsObject) && fsObject.LinkTarget != null)
+        {
+            return Task.FromResult(SFTPName.FromString(fsObject.LinkTarget));
+        }
+        throw new PathNotFoundException(path);
+    }
 
     public Task SymLink(SFTPPath linkPath, SFTPPath targetPath, CancellationToken cancellationToken = default)
-        => throw new NotImplementedException();
+    {
+        if (TryGetFSObject(targetPath, out var fsObject))
+        {
+            if (fsObject is FileSystemInfo)
+            {
+                File.CreateSymbolicLink(linkPath.Path, targetPath.Path);
+            }
+            else if (fsObject is DirectoryInfo)
+            {
+                Directory.CreateSymbolicLink(linkPath.Path, targetPath.Path);
+            }
+            return Task.CompletedTask;
+        }
+        throw new PathNotFoundException(targetPath);
+    }
 
 
     private static Task DoStat(SFTPPath path, SFTPAttributes attributes, CancellationToken cancellationToken = default)
