@@ -17,7 +17,7 @@ public sealed class SFTPServer : ISFTPServer, IDisposable
     private readonly Dictionary<RequestType, Func<uint, CancellationToken, Task>> _messagehandlers;
 
     public SFTPServer(IOptions<SFTPServerOptions> options, Stream inStream, Stream outStream)
-        : this(options, inStream, outStream, new DefaultSFTPHandler()) { }
+        : this(options, inStream, outStream, new DefaultSFTPHandler(new SFTPPath(options.Value?.Root ?? throw new ArgumentNullException(nameof(options.Value.Root))))) { }
 
     public SFTPServer(IOptions<SFTPServerOptions> options, Stream inStream, Stream outStream, ISFTPHandler sftpHandler)
     {
@@ -135,7 +135,7 @@ public sealed class SFTPServer : ISFTPServer, IDisposable
         var path = await _reader.ReadString(cancellationToken).ConfigureAwait(false);
         var flags = await _reader.ReadAccessFlags(cancellationToken).ConfigureAwait(false);
         var attrs = await _reader.ReadAttributes(cancellationToken).ConfigureAwait(false);
-        var result = await _sftphandler.Open(_sftphandler.GetPath(new SFTPPath(_options.Root), new SFTPPath(path)), flags.ToFileMode(), flags.ToFileAccess(), attrs, cancellationToken).ConfigureAwait(false);
+        var result = await _sftphandler.Open(_sftphandler.GetPath(new SFTPPath(path)), flags.ToFileMode(), flags.ToFileAccess(), attrs, cancellationToken).ConfigureAwait(false);
         await SendHandle(requestId, result.Handle, cancellationToken).ConfigureAwait(false);
     }
 
@@ -177,7 +177,7 @@ public sealed class SFTPServer : ISFTPServer, IDisposable
 
     private async Task LStatHandler(uint requestId, CancellationToken cancellationToken = default)
     {
-        var path = _sftphandler.GetPath(new SFTPPath(_options.Root), new SFTPPath(await _reader.ReadString(cancellationToken).ConfigureAwait(false)));
+        var path = _sftphandler.GetPath(new SFTPPath(await _reader.ReadString(cancellationToken).ConfigureAwait(false)));
         var result = await _sftphandler.LStat(path, cancellationToken).ConfigureAwait(false);
         await SendStat(requestId, result, cancellationToken).ConfigureAwait(false);
     }
@@ -191,7 +191,7 @@ public sealed class SFTPServer : ISFTPServer, IDisposable
 
     private async Task SetStatHandler(uint requestId, CancellationToken cancellationToken = default)
     {
-        var path = _sftphandler.GetPath(new SFTPPath(_options.Root), new SFTPPath(await _reader.ReadString(cancellationToken).ConfigureAwait(false)));
+        var path = _sftphandler.GetPath(new SFTPPath(await _reader.ReadString(cancellationToken).ConfigureAwait(false)));
         var attrs = await _reader.ReadAttributes(cancellationToken).ConfigureAwait(false);
         await _sftphandler.SetStat(path, attrs, cancellationToken).ConfigureAwait(false);
         await SendStatus(requestId, Status.Ok, cancellationToken).ConfigureAwait(false);
@@ -207,7 +207,7 @@ public sealed class SFTPServer : ISFTPServer, IDisposable
 
     private async Task OpenDirHandler(uint requestId, CancellationToken cancellationToken = default)
     {
-        var path = _sftphandler.GetPath(new SFTPPath(_options.Root), new SFTPPath(await _reader.ReadString(cancellationToken).ConfigureAwait(false)));
+        var path = _sftphandler.GetPath(new SFTPPath(await _reader.ReadString(cancellationToken).ConfigureAwait(false)));
         var result = await _sftphandler.OpenDir(path, cancellationToken).ConfigureAwait(false);
         await SendHandle(requestId, result.Handle, cancellationToken).ConfigureAwait(false);
     }
@@ -231,14 +231,14 @@ public sealed class SFTPServer : ISFTPServer, IDisposable
 
     private async Task RemoveHandler(uint requestId, CancellationToken cancellationToken = default)
     {
-        var path = _sftphandler.GetPath(new SFTPPath(_options.Root), new SFTPPath(await _reader.ReadString(cancellationToken).ConfigureAwait(false)));
+        var path = _sftphandler.GetPath(new SFTPPath(await _reader.ReadString(cancellationToken).ConfigureAwait(false)));
         await _sftphandler.Remove(path, cancellationToken).ConfigureAwait(false);
         await SendStatus(requestId, Status.Ok, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task MakeDirHandler(uint requestId, CancellationToken cancellationToken = default)
     {
-        var path = _sftphandler.GetPath(new SFTPPath(_options.Root), new SFTPPath(await _reader.ReadString(cancellationToken).ConfigureAwait(false)));
+        var path = _sftphandler.GetPath(new SFTPPath(await _reader.ReadString(cancellationToken).ConfigureAwait(false)));
         var attrs = await _reader.ReadAttributes(cancellationToken).ConfigureAwait(false);
         await _sftphandler.MakeDir(path, attrs, cancellationToken).ConfigureAwait(false);
         await SendStatus(requestId, Status.Ok, cancellationToken).ConfigureAwait(false);
@@ -246,7 +246,7 @@ public sealed class SFTPServer : ISFTPServer, IDisposable
 
     private async Task RemoveDirHandler(uint requestId, CancellationToken cancellationToken = default)
     {
-        var path = _sftphandler.GetPath(new SFTPPath(_options.Root), new SFTPPath(await _reader.ReadString(cancellationToken).ConfigureAwait(false)));
+        var path = _sftphandler.GetPath(new SFTPPath(await _reader.ReadString(cancellationToken).ConfigureAwait(false)));
         await _sftphandler.RemoveDir(path, cancellationToken).ConfigureAwait(false);
         await SendStatus(requestId, Status.Ok, cancellationToken).ConfigureAwait(false);
     }
@@ -267,15 +267,15 @@ public sealed class SFTPServer : ISFTPServer, IDisposable
 
     private async Task StatHandler(uint requestId, CancellationToken cancellationToken = default)
     {
-        var path = _sftphandler.GetPath(new SFTPPath(_options.Root), new SFTPPath(await _reader.ReadString(cancellationToken).ConfigureAwait(false)));
+        var path = _sftphandler.GetPath(new SFTPPath(await _reader.ReadString(cancellationToken).ConfigureAwait(false)));
         var result = await _sftphandler.Stat(path, cancellationToken).ConfigureAwait(false);
         await SendStat(requestId, result, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task RenameHandler(uint requestId, CancellationToken cancellationToken = default)
     {
-        var oldpath = _sftphandler.GetPath(new SFTPPath(_options.Root), new SFTPPath(await _reader.ReadString(cancellationToken).ConfigureAwait(false)));
-        var newpath = _sftphandler.GetPath(new SFTPPath(_options.Root), new SFTPPath(await _reader.ReadString(cancellationToken).ConfigureAwait(false)));
+        var oldpath = _sftphandler.GetPath(new SFTPPath(await _reader.ReadString(cancellationToken).ConfigureAwait(false)));
+        var newpath = _sftphandler.GetPath(new SFTPPath(await _reader.ReadString(cancellationToken).ConfigureAwait(false)));
         await _sftphandler.Rename(oldpath, newpath, cancellationToken).ConfigureAwait(false);
         await SendStatus(requestId, Status.Ok, cancellationToken).ConfigureAwait(false);
     }
@@ -283,7 +283,7 @@ public sealed class SFTPServer : ISFTPServer, IDisposable
 #if NET6_0_OR_GREATER
     private async Task ReadLinkHandler(uint requestId, CancellationToken cancellationToken = default)
     {
-        var path = _sftphandler.GetPath(new SFTPPath(_options.Root), new SFTPPath(await _reader.ReadString(cancellationToken).ConfigureAwait(false)));
+        var path = _sftphandler.GetPath(new SFTPPath(await _reader.ReadString(cancellationToken).ConfigureAwait(false)));
         var result = await _sftphandler.ReadLink(path, cancellationToken).ConfigureAwait(false);
 
         await _writer.Write(ResponseType.Name, cancellationToken).ConfigureAwait(false);
@@ -295,8 +295,8 @@ public sealed class SFTPServer : ISFTPServer, IDisposable
     {
         //NOTE: target and link appear to be swapped from the RFC??
         //Tested with sftp (commandline tool), WinSCP and CyberDuck
-        var targetpath = _sftphandler.GetPath(new SFTPPath(_options.Root), new SFTPPath(await _reader.ReadString(cancellationToken).ConfigureAwait(false)));
-        var linkpath = _sftphandler.GetPath(new SFTPPath(_options.Root), new SFTPPath(await _reader.ReadString(cancellationToken).ConfigureAwait(false)));
+        var targetpath = _sftphandler.GetPath(new SFTPPath(await _reader.ReadString(cancellationToken).ConfigureAwait(false)));
+        var linkpath = _sftphandler.GetPath(new SFTPPath(await _reader.ReadString(cancellationToken).ConfigureAwait(false)));
 
         await _sftphandler.SymLink(linkpath, targetpath, cancellationToken).ConfigureAwait(false);
         await SendStatus(requestId, Status.Ok, cancellationToken).ConfigureAwait(false);

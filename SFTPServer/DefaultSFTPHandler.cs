@@ -8,6 +8,10 @@ public class DefaultSFTPHandler : ISFTPHandler
 {
     private readonly Dictionary<SFTPHandle, SFTPPath> _filehandles = new();
     private readonly Dictionary<SFTPHandle, Stream> _streamhandles = new();
+    private readonly SFTPPath _root;
+
+    public DefaultSFTPHandler(SFTPPath root)
+        => _root = root ?? throw new ArgumentNullException(nameof(root));
 
     public virtual Task<SFTPExtensions> Init(uint clientVersion, string user, SFTPExtensions extensions, CancellationToken cancellationToken = default)
         => Task.FromResult(SFTPExtensions.None);
@@ -188,10 +192,10 @@ public class DefaultSFTPHandler : ISFTPHandler
     public virtual Task Extended(string name, Stream inStream, Stream outStream)
         => throw new NotImplementedException();
 
-    public virtual SFTPPath GetPath(SFTPPath root, SFTPPath path)
+    public virtual SFTPPath GetPath(SFTPPath path)
     {
-        var result = Path.GetFullPath(Path.Combine(root.Path, path.Path.TrimStart('/'))).Replace('/', '\\');
-        return new SFTPPath(result.StartsWith(root.Path, StringComparison.Ordinal) ? result : root.Path);
+        var result = Path.GetFullPath(Path.Combine(_root.Path, path.Path.TrimStart('/'))).Replace('/', '\\');
+        return new SFTPPath(result.StartsWith(_root.Path, StringComparison.Ordinal) ? result : _root.Path);
     }
 
     private static Task DoStat(SFTPPath path, SFTPAttributes attributes, CancellationToken cancellationToken = default)

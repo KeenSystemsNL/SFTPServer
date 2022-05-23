@@ -40,8 +40,7 @@ public class Program
         using var server = new SFTPServer(
             options,
             stdin,
-            stdout,
-            new DefaultSFTPHandler()
+            stdout
         );
 
         using var cts = new CancellationTokenSource();
