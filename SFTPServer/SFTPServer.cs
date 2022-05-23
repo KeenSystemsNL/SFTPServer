@@ -16,15 +16,15 @@ public sealed class SFTPServer : ISFTPServer, IDisposable
 
     private readonly Dictionary<RequestType, Func<uint, CancellationToken, Task>> _messagehandlers;
 
-    public SFTPServer(IOptions<SFTPServerOptions> options, Stream @in, Stream @out)
-        : this(options, @in, @out, new DefaultSFTPHandler()) { }
+    public SFTPServer(IOptions<SFTPServerOptions> options, Stream inStream, Stream outStream)
+        : this(options, inStream, outStream, new DefaultSFTPHandler()) { }
 
-    public SFTPServer(IOptions<SFTPServerOptions> options, Stream @in, Stream @out, ISFTPHandler sftpHandler)
+    public SFTPServer(IOptions<SFTPServerOptions> options, Stream inStream, Stream outStream, ISFTPHandler sftpHandler)
     {
         _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
 
-        _reader = new SshStreamReader(@in ?? throw new ArgumentNullException(nameof(@in)));
-        _writer = new SshStreamWriter(@out ?? throw new ArgumentNullException(nameof(@out)), _options.MaxMessageSize);
+        _reader = new SshStreamReader(inStream ?? throw new ArgumentNullException(nameof(inStream)));
+        _writer = new SshStreamWriter(outStream ?? throw new ArgumentNullException(nameof(outStream)), _options.MaxMessageSize);
         _sftphandler = sftpHandler ?? throw new ArgumentNullException(nameof(sftpHandler));
 
         _messagehandlers = new()
