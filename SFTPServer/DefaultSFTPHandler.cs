@@ -19,7 +19,7 @@ public class DefaultSFTPHandler : ISFTPHandler
     public virtual Task<SFTPHandle> Open(SFTPPath path, FileMode fileMode, FileAccess fileAccess, SFTPAttributes attributes, CancellationToken cancellationToken = default)
     {
         var handle = GetHandle();
-        _streamhandles.Add(handle, File.Open(path.Path, fileMode, fileAccess, FileShare.ReadWrite));
+        _streamhandles.Add(handle, File.Open(GetPath(path), fileMode, fileAccess, FileShare.ReadWrite));
         _filehandles.Add(handle, path);
         return Task.FromResult(handle);
     }
@@ -113,7 +113,7 @@ public class DefaultSFTPHandler : ISFTPHandler
         if (_filehandles.TryGetValue(handle, out var path))
         {
             _filehandles.Remove(handle);
-            return Task.FromResult(new SFTPNames(new DirectoryInfo(path.Path).GetFileSystemInfos().Select(fso => SFTPName.FromFileSystemInfo(fso)).OrderBy(f => f.Name)));
+            return Task.FromResult(new SFTPNames(new DirectoryInfo(GetPath(path)).GetFileSystemInfos().Select(fso => SFTPName.FromFileSystemInfo(fso)).OrderBy(f => f.Name)));
         }
         return Task.FromResult(SFTPNames.EOF);
     }
@@ -130,7 +130,7 @@ public class DefaultSFTPHandler : ISFTPHandler
 
     public virtual Task MakeDir(SFTPPath path, SFTPAttributes attributes, CancellationToken cancellationToken = default)
     {
-        Directory.CreateDirectory(path.Path);
+        Directory.CreateDirectory(GetPath(path));
         return Task.CompletedTask;
     }
 
@@ -138,7 +138,7 @@ public class DefaultSFTPHandler : ISFTPHandler
     {
         if (TryGetFSObject(path, out var fsObject) && fsObject is DirectoryInfo)
         {
-            Directory.Delete(path.Path);
+            Directory.Delete(fsObject.FullName);
             return Task.CompletedTask;
         }
         throw new PathNotFoundException(path);
@@ -154,7 +154,7 @@ public class DefaultSFTPHandler : ISFTPHandler
     {
         if (TryGetFSObject(oldPath, out var fsOldObject) && fsOldObject is FileInfo)
         {
-            File.Move(fsOldObject.FullName, newPath.Path);
+            File.Move(fsOldObject.FullName, GetPath(newPath));
             return Task.CompletedTask;
         }
         throw new PathNotFoundException(oldPath);
@@ -172,15 +172,16 @@ public class DefaultSFTPHandler : ISFTPHandler
 
     public virtual Task SymLink(SFTPPath linkPath, SFTPPath targetPath, CancellationToken cancellationToken = default)
     {
+        var link = GetPath(linkPath);
         if (TryGetFSObject(targetPath, out var fsObject))
         {
             switch (fsObject)
             {
                 case FileInfo:
-                    File.CreateSymbolicLink(linkPath.Path, targetPath.Path);
+                    File.CreateSymbolicLink(link, fsObject.FullName);
                     break;
                 case DirectoryInfo:
-                    Directory.CreateSymbolicLink(linkPath.Path, targetPath.Path);
+                    Directory.CreateSymbolicLink(link, fsObject.FullName);
                     break;
             }
             return Task.CompletedTask;
@@ -192,13 +193,13 @@ public class DefaultSFTPHandler : ISFTPHandler
     public virtual Task Extended(string name, Stream inStream, Stream outStream)
         => throw new NotImplementedException();
 
-    public virtual SFTPPath GetPath(SFTPPath path)
+    public virtual string GetPath(SFTPPath path)
     {
         var result = Path.GetFullPath(Path.Combine(_root.Path, path.Path.TrimStart('/'))).Replace('/', '\\');
-        return new SFTPPath(result.StartsWith(_root.Path, StringComparison.Ordinal) ? result : _root.Path);
+        return result.StartsWith(_root.Path, StringComparison.Ordinal) ? result : _root.Path;
     }
 
-    private static Task DoStat(SFTPPath path, SFTPAttributes attributes, CancellationToken cancellationToken = default)
+    private Task DoStat(SFTPPath path, SFTPAttributes attributes, CancellationToken cancellationToken = default)
     {
         if (TryGetFSObject(path, out var fsoObject))
         {
@@ -216,16 +217,17 @@ public class DefaultSFTPHandler : ISFTPHandler
         return Task.CompletedTask;
     }
 
-    private static bool TryGetFSObject(SFTPPath path, [NotNullWhen(true)] out FileSystemInfo? fileSystemObject)
+    private bool TryGetFSObject(SFTPPath path, [NotNullWhen(true)] out FileSystemInfo? fileSystemObject)
     {
-        if (Directory.Exists(path.Path))
+        var resolved = GetPath(path);
+        if (Directory.Exists(resolved))
         {
-            fileSystemObject = new DirectoryInfo(path.Path);
+            fileSystemObject = new DirectoryInfo(resolved);
             return true;
         }
-        if (File.Exists(path.Path))
+        if (File.Exists(resolved))
         {
-            fileSystemObject = new FileInfo(path.Path);
+            fileSystemObject = new FileInfo(resolved);
             return true;
         }
         fileSystemObject = null;

@@ -49,7 +49,7 @@ internal class SshStreamReader
         var mtime = flags.HasFlag(PFlags.AccessModifiedTime) ? await ReadTime(cancellationToken).ConfigureAwait(false) : DateTimeOffset.MinValue;
         var extended_count = flags.HasFlag(PFlags.Extended) ? await ReadUInt32(cancellationToken).ConfigureAwait(false) : 0;
 
-        var attrs = new SFTPAttributes(size, new User(owner), new Group(group), permissions, atime, mtime);
+        var attrs = new SFTPAttributes(size, new SFTPUser(owner), new SFTPGroup(group), permissions, atime, mtime);
 
         for (var i = 0; i < extended_count; i++)
         {

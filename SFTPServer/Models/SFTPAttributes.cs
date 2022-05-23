@@ -3,43 +3,17 @@ using System.Globalization;
 
 namespace SFTP.Models;
 
-public abstract record SFTPIdentifier(uint Id, string Name)
-{
-    public SFTPIdentifier(uint Id)
-        : this(Id, LookupId(Id)) { }
-
-    protected static string LookupId(uint id) => id switch
-    {
-        0 => "root",
-        65534 => "nobody",
-        _ => "unknown"
-    };
-}
-
-public record User(uint Id, string Name) : SFTPIdentifier(Id, Name)
-{
-    public User(uint Id)
-        : this(Id, LookupId(Id)) { }
-}
-
-public record Group(uint Id, string Name) : SFTPIdentifier(Id, Name)
-{
-    public Group(uint Id)
-        : this(Id, LookupId(Id)) { }
-}
-
-
 public record SFTPAttributes(
     ulong FileSize,
-    User User,
-    Group Group,
+    SFTPUser User,
+    SFTPGroup Group,
     Permissions Permissions,
     DateTimeOffset LastAccessedTime,
     DateTimeOffset LastModifiedTime
 )
 {
-    private static readonly User _defaultowner = new(0);
-    private static readonly Group _defaultgroup = new(0);
+    private static readonly SFTPUser _defaultowner = new(0);
+    private static readonly SFTPGroup _defaultgroup = new(0);
 
     private static readonly Permissions _defaultpermissions =
         Permissions.UserExecute
