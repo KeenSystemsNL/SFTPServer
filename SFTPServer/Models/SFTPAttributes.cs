@@ -21,10 +21,10 @@ public record SFTPAttributes(
         | Permissions.UserWrite
         | Permissions.GroupRead;
 
-    public static readonly SFTPAttributes Dummy = new(
+    public static readonly SFTPAttributes DummyFile = new(
         0, _defaultowner, _defaultgroup, _defaultpermissions, DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch
     );
-
+    public static readonly SFTPAttributes DummyDirectory = DummyFile with { Permissions = _defaultpermissions | Permissions.Directory };
 
     public IDictionary<string, string> ExtendeAttributes { get; } = new Dictionary<string, string>();
     public string GetLongFileName(string name)
