@@ -22,5 +22,8 @@ public enum Permissions : uint
     //Block_Device = 0x6000,
     RegularFile = 0x8000,
     //SymbolicLink = 0xA000,
-    //Socket = 0x000
+    //Socket = 0x000,
+
+    DefaultFile = UserRead | UserWrite | GroupRead | OtherRead | RegularFile,
+    DefaultDirectory = UserRead | UserWrite | UserExecute | GroupRead | GroupExecute | OtherRead | OtherExecute | Directory
 }
