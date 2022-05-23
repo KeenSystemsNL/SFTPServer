@@ -54,8 +54,8 @@ internal class SshStreamWriter : IDisposable
 
         if (flags.HasFlag(PFlags.UidGid))
         {
-            await Write(attributes.Uid, cancellationToken).ConfigureAwait(false);
-            await Write(attributes.Gid, cancellationToken).ConfigureAwait(false);
+            await Write(attributes.User.Id, cancellationToken).ConfigureAwait(false);
+            await Write(attributes.Group.Id, cancellationToken).ConfigureAwait(false);
         }
         if (flags.HasFlag(PFlags.Permissions))
         {

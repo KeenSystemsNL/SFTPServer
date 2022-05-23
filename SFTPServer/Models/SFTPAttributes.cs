@@ -3,17 +3,43 @@ using System.Globalization;
 
 namespace SFTP.Models;
 
+public abstract record SFTPIdentifier(uint Id, string Name)
+{
+    public SFTPIdentifier(uint Id)
+        : this(Id, LookupId(Id)) { }
+
+    protected static string LookupId(uint id) => id switch
+    {
+        0 => "root",
+        65534 => "nobody",
+        _ => "unknown"
+    };
+}
+
+public record User(uint Id, string Name) : SFTPIdentifier(Id, Name)
+{
+    public User(uint Id)
+        : this(Id, LookupId(Id)) { }
+}
+
+public record Group(uint Id, string Name) : SFTPIdentifier(Id, Name)
+{
+    public Group(uint Id)
+        : this(Id, LookupId(Id)) { }
+}
+
+
 public record SFTPAttributes(
     ulong FileSize,
-    uint Uid,
-    uint Gid,
+    User User,
+    Group Group,
     Permissions Permissions,
     DateTimeOffset LastAccessedTime,
     DateTimeOffset LastModifiedTime
 )
 {
-    private const uint _defaultowner = 0;
-    private const uint _defaultgroup = _defaultowner;
+    private static readonly User _defaultowner = new(0);
+    private static readonly Group _defaultgroup = new(0);
 
     private static readonly Permissions _defaultpermissions =
         Permissions.UserExecute
@@ -28,7 +54,7 @@ public record SFTPAttributes(
 
     public IDictionary<string, string> ExtendeAttributes { get; } = new Dictionary<string, string>();
     public string GetLongFileName(string name)
-        => ((FormattableString)$"{GetPermissionBits()} {1,3} {LookupId(Uid),-8} {LookupId(Gid),-8} {FileSize,8} {LastModifiedTime,12:MMM dd HH:mm} {name}").ToString(CultureInfo.InvariantCulture);
+        => ((FormattableString)$"{GetPermissionBits()} {1,3} {User.Name,-8} {Group.Name,-8} {FileSize,8} {LastModifiedTime,12:MMM dd HH:mm} {name}").ToString(CultureInfo.InvariantCulture);
 
     public static SFTPAttributes FromFileSystemInfo(FileSystemInfo fileSystemInfo)
         => new(
@@ -39,13 +65,6 @@ public record SFTPAttributes(
             fileSystemInfo.LastAccessTimeUtc,
             fileSystemInfo.LastWriteTimeUtc
         );
-
-    private static string LookupId(uint id) => id switch
-    {
-        0 => "root",
-        65534 => "nobody",
-        _ => "unknown"
-    };
 
     private string GetPermissionBits()
         => $"{(Permissions.HasFlag(Permissions.Directory) ? "d" : "-")}{AttrStr(Permissions.HasFlag(Permissions.UserRead), Permissions.HasFlag(Permissions.UserWrite), Permissions.HasFlag(Permissions.UserExecute))}{AttrStr(Permissions.HasFlag(Permissions.GroupRead), Permissions.HasFlag(Permissions.GroupWrite), Permissions.HasFlag(Permissions.GroupExecute))}{AttrStr(Permissions.HasFlag(Permissions.OtherRead), Permissions.HasFlag(Permissions.OtherWrite), Permissions.HasFlag(Permissions.OtherExecute))}";
