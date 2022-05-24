@@ -14,7 +14,7 @@ public interface ISFTPHandler
     Task SetStat(SFTPPath path, SFTPAttributes attributes, CancellationToken cancellationToken = default);
     Task FSetStat(SFTPHandle handle, SFTPAttributes attributes, CancellationToken cancellationToken = default);
     Task<SFTPHandle> OpenDir(SFTPPath path, CancellationToken cancellationToken = default);
-    Task<SFTPNames> ReadDir(SFTPHandle handle, CancellationToken cancellationToken = default);
+    Task<IEnumerable<SFTPName>> ReadDir(SFTPHandle handle, CancellationToken cancellationToken = default);
     Task Remove(SFTPPath path, CancellationToken cancellationToken = default);
     Task MakeDir(SFTPPath path, SFTPAttributes attributes, CancellationToken cancellationToken = default);
     Task RemoveDir(SFTPPath path, CancellationToken cancellationToken = default);

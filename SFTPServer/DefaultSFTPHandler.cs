@@ -108,14 +108,14 @@ public class DefaultSFTPHandler : ISFTPHandler
         return Task.FromResult(handle);
     }
 
-    public virtual Task<SFTPNames> ReadDir(SFTPHandle handle, CancellationToken cancellationToken = default)
+    public virtual Task<IEnumerable<SFTPName>> ReadDir(SFTPHandle handle, CancellationToken cancellationToken = default)
     {
         if (_filehandles.TryGetValue(handle, out var path))
         {
             _filehandles.Remove(handle);
-            return Task.FromResult(new SFTPNames(new DirectoryInfo(GetPath(path)).GetFileSystemInfos().Select(fso => SFTPName.FromFileSystemInfo(fso)).OrderBy(f => f.Name)));
+            return Task.FromResult(new DirectoryInfo(GetPath(path)).GetFileSystemInfos().Select(fso => SFTPName.FromFileSystemInfo(fso)));
         }
-        return Task.FromResult(SFTPNames.EOF);
+        return Task.FromResult(Enumerable.Empty<SFTPName>());
     }
 
     public virtual Task Remove(SFTPPath path, CancellationToken cancellationToken = default)

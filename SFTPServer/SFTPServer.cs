@@ -225,16 +225,11 @@ public sealed class SFTPServer : ISFTPServer, IDisposable
         var handle = new SFTPHandle(await _reader.ReadString(cancellationToken).ConfigureAwait(false));
         var result = await _sftphandler.ReadDir(handle, cancellationToken).ConfigureAwait(false);
 
-        if (result.Status == Status.Ok)
-        {
-            await _writer.Write(ResponseType.Name, cancellationToken).ConfigureAwait(false);
-            await _writer.Write(requestId, cancellationToken).ConfigureAwait(false);
-            await _writer.Write(result.Names.ToArray(), cancellationToken).ConfigureAwait(false);
-        }
-        else
-        {
-            await SendStatus(requestId, result.Status, cancellationToken).ConfigureAwait(false);
-        }
+        await _writer.Write(ResponseType.Name, cancellationToken).ConfigureAwait(false);
+        await _writer.Write(requestId, cancellationToken).ConfigureAwait(false);
+        await _writer.Write(result.ToArray(), cancellationToken).ConfigureAwait(false);
+
+        await SendStatus(requestId, Status.EndOfFile, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task RemoveHandler(uint requestId, CancellationToken cancellationToken = default)
