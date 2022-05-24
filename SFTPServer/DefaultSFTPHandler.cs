@@ -112,10 +112,9 @@ public class DefaultSFTPHandler : ISFTPHandler
     {
         if (_filehandles.TryGetValue(handle, out var path))
         {
-            _filehandles.Remove(handle);
             return Task.FromResult(new DirectoryInfo(GetPath(path)).GetFileSystemInfos().Select(fso => SFTPName.FromFileSystemInfo(fso)));
         }
-        return Task.FromResult(Enumerable.Empty<SFTPName>());
+        throw new HandleNotFoundException(handle);
     }
 
     public virtual Task Remove(SFTPPath path, CancellationToken cancellationToken = default)

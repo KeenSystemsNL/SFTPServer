@@ -3,6 +3,7 @@ using SFTP.Enums;
 using SFTP.Exceptions;
 using SFTP.IO;
 using SFTP.Models;
+using System.Collections.Concurrent;
 
 namespace SFTP;
 
@@ -15,6 +16,7 @@ public sealed class SFTPServer : ISFTPServer, IDisposable
     private uint _protocolversion;
 
     private readonly Dictionary<RequestType, Func<uint, CancellationToken, Task>> _messagehandlers;
+    private readonly ConcurrentDictionary<SFTPHandle, PagedResult<SFTPName>> _directorypages = new();
 
     public SFTPServer(IOptions<SFTPServerOptions> options, Stream inStream, Stream outStream)
         : this(
@@ -150,6 +152,7 @@ public sealed class SFTPServer : ISFTPServer, IDisposable
     private async Task CloseHandler(uint requestId, CancellationToken cancellationToken = default)
     {
         var handle = new SFTPHandle(await _reader.ReadString(cancellationToken).ConfigureAwait(false));
+        _directorypages.TryRemove(handle, out _);
         await _sftphandler.Close(handle, cancellationToken).ConfigureAwait(false);
         await SendStatus(requestId, Status.Ok, cancellationToken).ConfigureAwait(false);
     }
@@ -223,13 +226,23 @@ public sealed class SFTPServer : ISFTPServer, IDisposable
     private async Task ReadDirHandler(uint requestId, CancellationToken cancellationToken = default)
     {
         var handle = new SFTPHandle(await _reader.ReadString(cancellationToken).ConfigureAwait(false));
-        var result = await _sftphandler.ReadDir(handle, cancellationToken).ConfigureAwait(false);
 
-        await _writer.Write(ResponseType.Name, cancellationToken).ConfigureAwait(false);
-        await _writer.Write(requestId, cancellationToken).ConfigureAwait(false);
-        await _writer.Write(result.ToArray(), cancellationToken).ConfigureAwait(false);
-
-        await SendStatus(requestId, Status.EndOfFile, cancellationToken).ConfigureAwait(false);
+        // Retrieve results (if not already done for this handle) and put into PagedResults
+        var pagedresults = _directorypages.GetOrAdd(handle, new PagedResult<SFTPName>(await _sftphandler.ReadDir(handle, cancellationToken).ConfigureAwait(false)));
+        // Get next page
+        var page = pagedresults.NextPage();
+        if (page.Any())
+        {
+            await _writer.Write(ResponseType.Name, cancellationToken).ConfigureAwait(false);
+            await _writer.Write(requestId, cancellationToken).ConfigureAwait(false);
+            await _writer.Write(page.ToArray(), cancellationToken).ConfigureAwait(false);
+        }
+        else
+        {
+            // Remove paged results and send "EOF"
+            _directorypages.TryRemove(handle, out _);
+            await SendStatus(requestId, Status.EndOfFile, cancellationToken).ConfigureAwait(false);
+        }
     }
 
     private async Task RemoveHandler(uint requestId, CancellationToken cancellationToken = default)
@@ -257,10 +270,8 @@ public sealed class SFTPServer : ISFTPServer, IDisposable
     private async Task RealPathHandler(uint requestId, CancellationToken cancellationToken = default)
     {
         var path = await _reader.ReadString(cancellationToken).ConfigureAwait(false);
-        if (string.IsNullOrEmpty(path) || path == ".")
-        {
-            path = "/";
-        }
+        path = (string.IsNullOrEmpty(path) || path == ".") ? "/" : path;
+
         var result = await _sftphandler.RealPath(new SFTPPath(path), cancellationToken).ConfigureAwait(false);
 
         await _writer.Write(ResponseType.Name, cancellationToken).ConfigureAwait(false);
@@ -361,4 +372,20 @@ public sealed class SFTPServer : ISFTPServer, IDisposable
             _ => "Unknown error"
         };
     public void Dispose() => ((IDisposable)_writer).Dispose();
+
+    private class PagedResult<T>
+    {
+        private readonly IList<T> _results;
+        private readonly int _pagesize;
+        private int _page;
+
+        public PagedResult(IEnumerable<T> items, int pagesize = 100)
+        {
+            _results = items.ToList();
+            _pagesize = pagesize;
+            _page = 0;
+        }
+
+        public IEnumerable<T> NextPage() => _results.Skip(_page++ * _pagesize).Take(_pagesize);
+    }
 }
