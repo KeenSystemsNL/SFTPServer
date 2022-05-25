@@ -10,6 +10,8 @@ public class DefaultSFTPHandler : ISFTPHandler
     private readonly Dictionary<SFTPHandle, Stream> _streamhandles = new();
     private readonly SFTPPath _root;
 
+    private static readonly Uri _virtualroot = new Uri("virt://", UriKind.Absolute);
+
     public DefaultSFTPHandler(SFTPPath root)
         => _root = root ?? throw new ArgumentNullException(nameof(root));
 
@@ -19,7 +21,7 @@ public class DefaultSFTPHandler : ISFTPHandler
     public virtual Task<SFTPHandle> Open(SFTPPath path, FileMode fileMode, FileAccess fileAccess, SFTPAttributes attributes, CancellationToken cancellationToken = default)
     {
         var handle = GetHandle();
-        _streamhandles.Add(handle, File.Open(GetPath(path), fileMode, fileAccess, FileShare.ReadWrite));
+        _streamhandles.Add(handle, File.Open(GetPhysicalPath(path), fileMode, fileAccess, FileShare.ReadWrite));
         _filehandles.Add(handle, path);
         return Task.FromResult(handle);
     }
@@ -112,7 +114,7 @@ public class DefaultSFTPHandler : ISFTPHandler
     {
         if (_filehandles.TryGetValue(handle, out var path))
         {
-            return Task.FromResult(new DirectoryInfo(GetPath(path)).GetFileSystemInfos().Select(fso => SFTPName.FromFileSystemInfo(fso)));
+            return Task.FromResult(new DirectoryInfo(GetPhysicalPath(path)).GetFileSystemInfos().Select(fso => SFTPName.FromFileSystemInfo(fso)));
         }
         throw new HandleNotFoundException(handle);
     }
@@ -129,7 +131,7 @@ public class DefaultSFTPHandler : ISFTPHandler
 
     public virtual Task MakeDir(SFTPPath path, SFTPAttributes attributes, CancellationToken cancellationToken = default)
     {
-        Directory.CreateDirectory(GetPath(path));
+        Directory.CreateDirectory(GetPhysicalPath(path));
         return Task.CompletedTask;
     }
 
@@ -144,7 +146,7 @@ public class DefaultSFTPHandler : ISFTPHandler
     }
 
     public virtual Task<SFTPPath> RealPath(SFTPPath path, CancellationToken cancellationToken = default)
-        => Task.FromResult(path);
+        => Task.FromResult(new SFTPPath(GetVirtualPath(path)));
 
     public virtual Task<SFTPAttributes> Stat(SFTPPath path, CancellationToken cancellationToken = default)
         => LStat(path, cancellationToken);
@@ -153,7 +155,7 @@ public class DefaultSFTPHandler : ISFTPHandler
     {
         if (TryGetFSObject(oldPath, out var fsOldObject) && fsOldObject is FileInfo)
         {
-            File.Move(fsOldObject.FullName, GetPath(newPath));
+            File.Move(fsOldObject.FullName, GetPhysicalPath(newPath));
             return Task.CompletedTask;
         }
         throw new PathNotFoundException(oldPath);
@@ -171,7 +173,7 @@ public class DefaultSFTPHandler : ISFTPHandler
 
     public virtual Task SymLink(SFTPPath linkPath, SFTPPath targetPath, CancellationToken cancellationToken = default)
     {
-        var link = GetPath(linkPath);
+        var link = GetPhysicalPath(linkPath);
         if (TryGetFSObject(targetPath, out var fsObject))
         {
             switch (fsObject)
@@ -192,11 +194,11 @@ public class DefaultSFTPHandler : ISFTPHandler
     public virtual Task Extended(string name, Stream inStream, Stream outStream)
         => throw new NotImplementedException();
 
-    public virtual string GetPath(SFTPPath path)
-    {
-        var result = Path.GetFullPath(Path.Combine(_root.Path, path.Path.TrimStart('/'))).Replace('/', '\\');
-        return result.StartsWith(_root.Path, StringComparison.Ordinal) ? result : _root.Path;
-    }
+    public virtual string GetPhysicalPath(SFTPPath path)
+        => Path.Join(_root.Path, GetVirtualPath(path));
+
+    public virtual string GetVirtualPath(SFTPPath path)
+        => new Uri(_virtualroot, path.Path).LocalPath;
 
     private Task DoStat(SFTPPath path, SFTPAttributes attributes, CancellationToken cancellationToken = default)
     {
@@ -218,7 +220,7 @@ public class DefaultSFTPHandler : ISFTPHandler
 
     private bool TryGetFSObject(SFTPPath path, [NotNullWhen(true)] out FileSystemInfo? fileSystemObject)
     {
-        var resolved = GetPath(path);
+        var resolved = GetPhysicalPath(path);
         if (Directory.Exists(resolved))
         {
             fileSystemObject = new DirectoryInfo(resolved);
