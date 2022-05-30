@@ -116,8 +116,9 @@ internal class SshStreamWriter : IDisposable
         {
             throw new ArgumentNullException(nameof(str));
         }
-        await Write((uint)str.Length, cancellationToken).ConfigureAwait(false);
-        await Write(_encoding.GetBytes(str), cancellationToken).ConfigureAwait(false);
+        var data = _encoding.GetBytes(str);
+        await Write(data.Length, cancellationToken).ConfigureAwait(false);
+        await Write(data, cancellationToken).ConfigureAwait(false);
     }
 
     public Task Write(byte[] data, CancellationToken cancellationToken = default)
