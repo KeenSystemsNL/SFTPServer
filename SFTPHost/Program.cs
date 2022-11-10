@@ -15,7 +15,7 @@ public class Program
     public static async Task Main(string[] args)
     {
         var configurationbuilder = new ConfigurationBuilder()
-            .SetBasePath(Path.GetDirectoryName(Assembly.GetEntryAssembly()!.Location))
+            .SetBasePath(Path.GetDirectoryName(Assembly.GetEntryAssembly()!.Location)!)
             .AddJsonFile("appsettings.json", optional: true, reloadOnChange: true);
         var configuration = configurationbuilder.Build();
 
